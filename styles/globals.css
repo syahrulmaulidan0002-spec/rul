@@ -1,0 +1,7 @@
+/* minimal globals for Tailwind integration */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* import glass styles */
+@import './glass.css';
