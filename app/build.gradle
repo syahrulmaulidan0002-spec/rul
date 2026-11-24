@@ -10,8 +10,12 @@ android {
         applicationId "com.gameboost.app"
         minSdk 21          // Android 5.0, supaya HP lama tetap bisa pakai
         targetSdk 35       // Android 15 (juga berjalan di Android 16 dan HyperOS)
-        versionCode 2
-        versionName "2.0"
+        versionCode 3
+        versionName "3.0"
+    }
+
+    buildFeatures {
+        aidl true          // untuk layanan shell Shizuku
     }
 
     buildTypes {
@@ -30,6 +34,8 @@ android {
     }
 }
 
-// Tanpa dependensi tambahan: aplikasi ringan, build cepat, dan tidak membebani HP lama.
 dependencies {
+    // Shizuku: hak shell/root tanpa perlu root penuh. Hanya dipakai jika pengguna menyalakannya.
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
 }

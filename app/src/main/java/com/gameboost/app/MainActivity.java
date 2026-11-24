@@ -10,7 +10,9 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
 import android.graphics.Insets;
+import android.graphics.LinearGradient;
 import android.graphics.Rect;
+import android.graphics.Shader;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -45,6 +47,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_REQUESTED = "requested";
     static final String EXTRA_KILL = "kill";
     static final String EXTRA_NOTIF = "notif";
+    static final String EXTRA_FREEZE = "freeze";
 
     private static final int REQ_NOTIF = 21;
 
@@ -77,13 +80,16 @@ public class MainActivity extends Activity {
     private ListView list;
     private RingView ringRam;
     private TextView tvRamDetail, tvTemp, tvBatt, tvGraphics, tvCount, tvSelected;
-    private Switch swKill, swNotif, swDnd, swOverlay, swFreeform;
+    private Switch swKill, swNotif, swDnd, swOverlay, swFreeform, swFreeze, swPerf;
+    private View cardRestore;
+    private TextView tvRestore;
     private Button btnMain;
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             updateStatus();
             updateBottom();
+            updateRestore();
             handler.postDelayed(this, 2000);
         }
     };
@@ -119,6 +125,12 @@ public class MainActivity extends Activity {
         tvGraphics = header.findViewById(R.id.tvGraphics);
         tvCount = header.findViewById(R.id.tvCount);
         tvGraphics.setText(SysInfo.advice(this));
+        setupCreator(header);
+        cardRestore = header.findViewById(R.id.cardRestore);
+        tvRestore = header.findViewById(R.id.tvRestore);
+        header.findViewById(R.id.rowRestore).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { restoreAll(); }
+        });
         ((TextView) header.findViewById(R.id.tvVendorHint)).setText(
                 VendorHelper.hint() + "\n\nAndroid 13+: jika \"Akses notifikasi\" abu-abu, buka Info Aplikasi "
                         + "GameBoost, ketuk titik tiga di kanan atas, lalu pilih \"Izinkan setelan terbatas\".");
@@ -154,6 +166,12 @@ public class MainActivity extends Activity {
         });
 
         loadApps();
+
+        // Pertama kali dibuka: tampilkan panduan Shizuku/root.
+        if (!prefs.getBoolean("guide_seen", false)) {
+            prefs.edit().putBoolean("guide_seen", true).apply();
+            openGuide();
+        }
     }
 
     @Override
@@ -209,6 +227,12 @@ public class MainActivity extends Activity {
         addPerm(parent, "Tanpa batasan baterai", R.drawable.ic_battery, 0xFF34C759,
                 this::ignoresBatteryOpt, this::requestIgnoreBattery);
 
+        addPerm(parent, "Akses Shizuku (bekukan & performa)", R.drawable.ic_bolt, 0xFF64D2FF,
+                ShizukuHelper::granted, this::openGuide);
+
+        addPerm(parent, "Panduan Shizuku & root", R.drawable.ic_tune, 0xFFAF52DE,
+                null, this::openGuide);
+
         addPerm(parent, VendorHelper.title(), R.drawable.ic_tune, 0xFFFF9F0A,
                 null, () -> VendorHelper.open(this));
     }
@@ -253,6 +277,8 @@ public class MainActivity extends Activity {
         swNotif = addSwitch(parent, "Hapus semua notifikasi yang masuk", R.drawable.ic_bell, 0xFFFF453A, "notif", true);
         swDnd = addSwitch(parent, "Hening total (Jangan Ganggu)", R.drawable.ic_moon, 0xFF5E5CE6, "dnd", true);
         swOverlay = addSwitch(parent, "Jendela mengambang saat bermain", R.drawable.ic_window, 0xFF0A84FF, "overlay", true);
+        swFreeze = addSwitch(parent, "Bekukan, bukan sekadar tutup (Shizuku)", R.drawable.ic_sparkle, 0xFF64D2FF, "freeze", true);
+        swPerf = addSwitch(parent, "Mode performa: refresh rate maks (Shizuku)", R.drawable.ic_bolt, 0xFF30D158, "perf", true);
         swFreeform = addSwitch(parent, "Buka game di jendela kecil", R.drawable.ic_gamepad, 0xFF32ADE6, "freeform", false);
     }
 
@@ -347,6 +373,8 @@ public class MainActivity extends Activity {
         final boolean notif = swNotif.isChecked();
         final boolean dnd = swDnd.isChecked();
         final boolean overlay = swOverlay.isChecked();
+        final boolean freeze = swFreeze.isChecked();
+        final boolean perf = swPerf.isChecked();
 
         if (overlay && !canOverlay()) {
             toast("Izinkan \"Tampil di atas aplikasi lain\" lalu tekan Mulai lagi");
@@ -367,12 +395,19 @@ public class MainActivity extends Activity {
             return;
         }
 
+        final boolean shizuku = ShizukuHelper.ready();
+        final boolean freezeOn = freeze && shizuku;
+        if ((freeze || perf) && !shizuku) {
+            toast("Shizuku belum aktif, memakai cara biasa. Buka \"Panduan Shizuku & root\" di bagian Izin.");
+        }
+
         btnMain.setEnabled(false);
         btnMain.setText("Membersihkan…");
 
         new Thread(new Runnable() {
             @Override public void run() {
-                final GameBooster.Result r = kill ? GameBooster.boost(MainActivity.this, game.pkg) : null;
+                final GameBooster.Result r = kill ? GameBooster.boost(MainActivity.this, game.pkg, freezeOn) : null;
+                if (perf && shizuku) GameBooster.enablePerf(MainActivity.this, game.pkg);
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         if (dnd) GameBooster.enableDnd(MainActivity.this);
@@ -382,6 +417,7 @@ public class MainActivity extends Activity {
                         s.putExtra(EXTRA_OVERLAY, overlay);
                         s.putExtra(EXTRA_KILL, kill);
                         s.putExtra(EXTRA_NOTIF, notif);
+                        s.putExtra(EXTRA_FREEZE, freezeOn);
                         if (r != null) {
                             s.putExtra(EXTRA_FREED, r.freedMb);
                             s.putExtra(EXTRA_REQUESTED, r.requested);
@@ -390,8 +426,11 @@ public class MainActivity extends Activity {
                         else startService(s);
 
                         if (r != null) {
-                            toast(String.format(Locale.US, "%d aplikasi dihentikan  •  RAM +%d MB%s",
-                                    r.requested, r.freedMb, r.viaRoot ? "  (root)" : ""));
+                            String what = r.frozen > 0
+                                    ? String.format(Locale.US, "%d aplikasi dibekukan", r.frozen)
+                                    : String.format(Locale.US, "%d aplikasi dihentikan", r.requested);
+                            toast(String.format(Locale.US, "%s  •  RAM +%d MB  •  cara: %s",
+                                    what, r.freedMb, r.method));
                         }
                         btnMain.setEnabled(true);
                         launchGame(game.pkg);
@@ -452,6 +491,54 @@ public class MainActivity extends Activity {
             btnMain.setBackgroundResource(R.drawable.bg_button);
             tvSelected.setText(g != null ? g.label : "Pilih game dari daftar di atas");
         }
+    }
+
+    /** Nama pembuat: gradasi warna dan muncul perlahan seperti tanda tangan. */
+    private void setupCreator(View header) {
+        final TextView name = header.findViewById(R.id.tvCreatorName);
+        View wrap = header.findViewById(R.id.creatorWrap);
+        name.post(new Runnable() {
+            @Override public void run() {
+                float w = Math.max(1f, name.getPaint().measureText(name.getText().toString()));
+                name.getPaint().setShader(new LinearGradient(0, 0, w, 0,
+                        new int[]{0xFF64D2FF, 0xFF0A84FF, 0xFFBF5AF2, 0xFFFF375F}, null,
+                        Shader.TileMode.CLAMP));
+                name.invalidate();
+            }
+        });
+        float d = getResources().getDisplayMetrics().density;
+        wrap.setAlpha(0f);
+        wrap.setTranslationY(8f * d);
+        wrap.animate().alpha(1f).translationY(0f).setStartDelay(250).setDuration(850).start();
+    }
+
+    private void openGuide() {
+        startActivity(new Intent(this, GuideActivity.class));
+    }
+
+    private void updateRestore() {
+        int n = GameBooster.pendingCount(this);
+        cardRestore.setVisibility(n > 0 ? View.VISIBLE : View.GONE);
+        if (n > 0) tvRestore.setText("Pulihkan semua aplikasi (" + n + ")");
+    }
+
+    private void restoreAll() {
+        if (!ShizukuHelper.ready()) {
+            toast("Nyalakan Shizuku dulu, lalu ketuk lagi");
+            return;
+        }
+        final android.content.Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final int n = GameBooster.restoreSession(app);
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        toast(n >= 0 ? "Dipulihkan: " + n + " aplikasi" : "Gagal memulihkan, coba lagi");
+                        updateRestore();
+                    }
+                });
+            }
+        }).start();
     }
 
     private boolean canOverlay() {

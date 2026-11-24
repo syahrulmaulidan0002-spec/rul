@@ -1,5 +1,7 @@
 # GameBoost
 
+> Dibuat oleh **Syahrul Maulidan**
+
 Aplikasi Android (Java, tanpa library tambahan) untuk **mode game eksklusif**: saat dinyalakan,
 aplikasi latar belakang ditutup, notifikasi dihapus, HP dihening-kan, dan hanya game yang berjalan.
 Tampilan bergaya iOS (mode gelap) dengan jendela mengambang yang bisa digeser dan mengecil jadi pil.
@@ -16,6 +18,27 @@ Setiap kali kode di-push, GitHub Actions membangun APK otomatis:
 
 Untuk membangun sendiri: buka folder di Android Studio lalu **Run**, atau `gradle assembleDebug`
 (Gradle 8.7, JDK 17).
+
+## Shizuku: bekukan semua aplikasi (opsional, paling kuat)
+
+Dengan [Shizuku](https://shizuku.rikka.app/), GameBoost mendapat hak shell (atau root bila Shizuku
+dinyalakan lewat root) tanpa perlu root penuh. Hasilnya:
+
+- **Bekukan**: aplikasi latar belakang di-`force-stop` lalu di-`suspend`, jadi tidak bisa hidup lagi
+  dan tidak bisa membunyikan notifikasi sampai game selesai. Setelah selesai dipulihkan otomatis.
+  Kalau ada yang tertinggal (ikon abu-abu), ketuk **Pulihkan semua** di layar utama.
+- **Mode performa**: Game Mode "performa" untuk game (Android 12+), refresh rate layar dikunci ke
+  maksimal, dan penghemat daya dimatikan selama bermain. Setelan semula dikembalikan.
+  Pelindung suhu HP **tidak** disentuh.
+
+Panduan langkah demi langkah ada di aplikasi (muncul saat pertama dibuka, atau lewat
+**Panduan Shizuku & root** di bagian Izin). Ringkasnya:
+
+- **Belum root**: pasang Shizuku → aktifkan Opsi pengembang → nyalakan Debugging nirkabel →
+  Start di Shizuku (Pairing) → izinkan GameBoost. Setelah HP restart, ulangi bagian Start saja.
+- **Sudah root**: pasang Shizuku → ketuk "Start (root)" → izinkan GameBoost.
+
+Tanpa Shizuku, aplikasi tetap bekerja dengan cara biasa.
 
 ## Cara memakai
 
@@ -42,9 +65,13 @@ Untuk membangun sendiri: buka folder di Android Studio lalu **Run**, atau `gradl
 
 ## Batasan yang jujur
 
+- Shizuku harus dinyalakan ulang setiap HP restart (kecuali dinyalakan lewat root). Beberapa HP,
+  terutama HyperOS, butuh izin tambahan seperti "Debugging USB (pengaturan keamanan)".
+- Mode performa tidak bisa memaksa FPS melewati batas game dan chipset. Yang dilakukan hanya
+  menyingkirkan penghambat supaya FPS lebih stabil.
 - Aplikasi tidak bisa menambah kekuatan chipset atau GPU. Hasilnya RAM lebih lega dan tanpa
   gangguan, jadi FPS biasanya naik kecil sampai sedang dan lebih stabil.
-- **Tanpa root**, Android hanya mengizinkan `killBackgroundProcesses`: aplikasi yang sedang di
+- **Tanpa root dan tanpa Shizuku**, Android hanya mengizinkan `killBackgroundProcesses`: aplikasi yang sedang di
   latar belakang berhenti, tetapi tidak bisa dipaksa mati total. Di Android 15 pun sebagian
   proses sistem tetap berjalan. **Dengan root**, GameBoost memakai `am force-stop` yang lebih tuntas.
 - Notifikasi yang bersifat *ongoing* (misalnya pemutar musik) tidak bisa dihapus oleh aplikasi biasa.
@@ -64,7 +91,10 @@ app/src/main/java/com/gameboost/app/
   MainActivity.java       layar utama, izin, pilih game, tombol mulai/hentikan
   GameService.java        layanan foreground, jendela mengambang, penjaga tutup-ulang 20 detik
   GameNotifService.java   penghapus notifikasi selama mode game
-  GameBooster.java        tutup aplikasi latar belakang, Jangan Ganggu, root opsional
+  GameBooster.java        tutup/bekukan aplikasi, mode performa, Jangan Ganggu, root opsional
+  GuideActivity.java      panduan langkah demi langkah (Shizuku, root, cara pakai)
+  ShizukuHelper.java      status, izin, dan perintah shell lewat Shizuku
+  ShellService.java       layanan shell yang dijalankan Shizuku
   VendorHelper.java       pintasan Autostart/baterai untuk HyperOS, ColorOS, dll.
   RingView.java           cincin progres RAM
   SysInfo.java            RAM, suhu/baterai, saran grafis

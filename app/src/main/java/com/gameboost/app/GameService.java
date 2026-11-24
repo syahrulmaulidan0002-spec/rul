@@ -79,6 +79,7 @@ public class GameService extends Service {
 
     // Penjaga: aplikasi latar belakang sering hidup lagi sendiri, jadi ditutup ulang berkala.
     private boolean killLoop = true;
+    private boolean freezeMode = false;
     private volatile boolean killing = false;
     private final Runnable watchdog = new Runnable() {
         @Override public void run() {
@@ -89,7 +90,7 @@ public class GameService extends Service {
                 new Thread(new Runnable() {
                     @Override public void run() {
                         try {
-                            GameBooster.quickKill(app, game);
+                            GameBooster.quickKill(app, game, freezeMode);
                             GameNotifService.clearAll();
                         } finally {
                             killing = false;
@@ -121,6 +122,7 @@ public class GameService extends Service {
             requested = intent.getIntExtra(MainActivity.EXTRA_REQUESTED, 0);
             killLoop = intent.getBooleanExtra(MainActivity.EXTRA_KILL, true);
             blockNotifs = intent.getBooleanExtra(MainActivity.EXTRA_NOTIF, false);
+            freezeMode = intent.getBooleanExtra(MainActivity.EXTRA_FREEZE, false);
         }
 
         // Android 14+ mewajibkan tipe layanan foreground.
@@ -161,6 +163,11 @@ public class GameService extends Service {
         running = false;
         blockNotifs = false;
         GameBooster.restoreDnd(this);
+        // Pulihkan aplikasi yang dibekukan dan setelan performa (butuh Shizuku, jadi di thread lain).
+        final Context appCtx = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() { GameBooster.restoreSession(appCtx); }
+        }).start();
         stopForeground(true);
         super.onDestroy();
     }
@@ -406,7 +413,7 @@ public class GameService extends Service {
         final Context app = getApplicationContext();
         new Thread(new Runnable() {
             @Override public void run() {
-                final GameBooster.Result r = GameBooster.boost(app, gamePkg);
+                final GameBooster.Result r = GameBooster.boost(app, gamePkg, freezeMode);
                 handler.post(new Runnable() {
                     @Override public void run() {
                         cleaning = false;
