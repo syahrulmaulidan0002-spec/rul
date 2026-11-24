@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.gameboost.app"
-        minSdk 23          // Android 6.0 (syarat library Shizuku), masih mencakup HP lama
+        minSdk 24          // Android 7.0 (syarat library Shizuku), masih mencakup HP lama
         targetSdk 35       // Android 15 (juga berjalan di Android 16 dan HyperOS)
         versionCode 3
         versionName "3.0"

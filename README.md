@@ -6,7 +6,7 @@ Aplikasi Android (Java, tanpa library tambahan) untuk **mode game eksklusif**: s
 aplikasi latar belakang ditutup, notifikasi dihapus, HP dihening-kan, dan hanya game yang berjalan.
 Tampilan bergaya iOS (mode gelap) dengan jendela mengambang yang bisa digeser dan mengecil jadi pil.
 
-Berjalan di Android 6.0 sampai Android 15/16 dan di HyperOS, MIUI, ColorOS, One UI, dll.
+Berjalan di Android 7.0 sampai Android 15/16 dan di HyperOS, MIUI, ColorOS, One UI, dll.
 
 ## Mengambil APK (tanpa Android Studio)
 
