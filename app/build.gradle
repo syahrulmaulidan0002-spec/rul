@@ -1,0 +1,35 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.gameboost.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.gameboost.app"
+        minSdk 21          // Android 5.0, supaya HP lama tetap bisa pakai
+        targetSdk 35       // Android 15 (juga berjalan di Android 16 dan HyperOS)
+        versionCode 2
+        versionName "2.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+// Tanpa dependensi tambahan: aplikasi ringan, build cepat, dan tidak membebani HP lama.
+dependencies {
+}

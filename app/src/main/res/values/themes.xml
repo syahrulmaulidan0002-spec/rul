@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GameBoost" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorControlActivated">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <!-- Kartu grup ala iOS (inset grouped) -->
+    <style name="Card">
+        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:clipToOutline">true</item>
+    </style>
+
+    <!-- Judul bagian kecil abu-abu -->
+    <style name="Section">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/muted</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:paddingStart">16dp</item>
+    </style>
+</resources>

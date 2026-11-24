@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <View
+        android:id="@+id/permDivider"
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginStart="60dp"
+        android:background="@color/stroke" />
+
+    <LinearLayout
+        android:id="@+id/permRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:gravity="center_vertical"
+        android:minHeight="52dp"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="10dp">
+
+        <FrameLayout
+            android:id="@+id/permTile"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_tile">
+
+            <ImageView
+                android:id="@+id/permIcon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:tint="@color/text" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/permTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:textColor="@color/text"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/permStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Atur"
+            android:textColor="@color/accent"
+            android:textSize="16sp" />
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="2dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_chevron_right"
+            android:tint="#48484A" />
+    </LinearLayout>
+</LinearLayout>

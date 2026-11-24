@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <View
+        android:id="@+id/swDivider"
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginStart="60dp"
+        android:background="@color/stroke" />
+
+    <LinearLayout
+        android:id="@+id/swRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:gravity="center_vertical"
+        android:minHeight="52dp"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="10dp">
+
+        <FrameLayout
+            android:id="@+id/swTile"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_tile">
+
+            <ImageView
+                android:id="@+id/swIcon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:tint="@color/text" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/swTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:textColor="@color/text"
+            android:textSize="16sp" />
+
+        <Switch
+            android:id="@+id/swSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@null"
+            android:thumb="@drawable/ios_switch_thumb"
+            android:track="@drawable/ios_switch_track" />
+    </LinearLayout>
+</LinearLayout>
