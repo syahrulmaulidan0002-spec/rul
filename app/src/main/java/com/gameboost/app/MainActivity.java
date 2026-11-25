@@ -67,6 +67,8 @@ public class MainActivity extends Activity {
     private View cardRestore;
     private TextView tvRamDetail, tvTemp, tvBatt, tvGraphics, tvCount, tvMineCount, tvSelected;
     private TextView heroName, heroSub, heroStatus, tvNoGames, tvShizuku, tvRestore;
+    private TextView heroScore, tvAuto, tvSessionTitle, tvSessionBody;
+    private View cardSession;
     private Button btnMain;
 
     private final Runnable ticker = new Runnable() {
@@ -75,6 +77,8 @@ public class MainActivity extends Activity {
             updateBottom();
             updateHeroStatus();
             updateShizuku();
+            updateAuto();
+            updateSession();
             updateRestore();
             handler.postDelayed(this, 2000);
         }
@@ -119,6 +123,12 @@ public class MainActivity extends Activity {
         gamesRow = header.findViewById(R.id.gamesRow);
         tvNoGames = header.findViewById(R.id.tvNoGames);
         tvShizuku = header.findViewById(R.id.tvShizuku);
+        heroScore = header.findViewById(R.id.heroScore);
+        tvAuto = header.findViewById(R.id.tvAuto);
+        cardSession = header.findViewById(R.id.cardSession);
+        tvSessionTitle = header.findViewById(R.id.tvSessionTitle);
+        tvSessionBody = header.findViewById(R.id.tvSessionBody);
+        header.findViewById(R.id.rowAuto).setOnClickListener(v -> openSettings());
         cardRestore = header.findViewById(R.id.cardRestore);
         tvRestore = header.findViewById(R.id.tvRestore);
 
@@ -259,6 +269,7 @@ public class MainActivity extends Activity {
     private void select(String pkg) {
         selectedPkg = pkg;
         prefs.edit().putString("game_pkg", pkg).apply();
+        GameWidget.update(this);
         rebuild();
     }
 
@@ -397,6 +408,32 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void updateAuto() {
+        if (tvAuto == null) return;
+        if (!Prefs.flag(this, "auto")) {
+            tvAuto.setText("Mati");
+            tvAuto.setTextColor(SysInfo.color(this, R.color.muted));
+        } else if (!PermHelper.hasUsageAccess(this)) {
+            tvAuto.setText("Perlu izin");
+            tvAuto.setTextColor(SysInfo.color(this, R.color.warn));
+        } else {
+            tvAuto.setText(GameService.watching ? "Aktif" : "Menyalakan…");
+            tvAuto.setTextColor(SysInfo.color(this, R.color.ok));
+        }
+    }
+
+    private void updateSession() {
+        if (cardSession == null) return;
+        String t = SessionStats.title(this);
+        if (t == null) {
+            cardSession.setVisibility(View.GONE);
+            return;
+        }
+        cardSession.setVisibility(View.VISIBLE);
+        tvSessionTitle.setText(t);
+        tvSessionBody.setText(SessionStats.body(this));
+    }
+
     private void updateShizuku() {
         if (tvShizuku == null) return;
         String text;
@@ -430,6 +467,9 @@ public class MainActivity extends Activity {
         tvTemp.setTextColor(SysInfo.color(this,
                 b.tempC >= 43f ? R.color.danger : (b.tempC >= 40f ? R.color.warn : R.color.text)));
         tvBatt.setText(String.format(Locale.US, "%d%%%s", b.level, b.charging ? " ⚡" : ""));
+        ReadinessScore.Result rs = ReadinessScore.compute(this);
+        heroScore.setText("Kesiapan " + rs.score + "/100  •  " + rs.tip);
+        heroScore.setTextColor(SysInfo.color(this, rs.colorRes));
         mainBattery.setLevel(b.level, b.charging);
     }
 

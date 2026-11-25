@@ -176,6 +176,8 @@ public class SettingsActivity extends Activity {
         addSwitch(parent, "Putus internet latar belakang (Shizuku)", R.drawable.ic_wifi, 0xFF30D158, "netfocus");
         addSwitch(parent, "Mode performa: refresh rate maks (Shizuku)", R.drawable.ic_bolt, 0xFF30D158, "perf");
         addSwitch(parent, "Buka game di jendela kecil", R.drawable.ic_gamepad, 0xFF32ADE6, "freeform");
+        addSwitch(parent, "Pengingat istirahat", R.drawable.ic_moon, 0xFF5E5CE6, "breakremind");
+        addIntervalRow(parent);
     }
 
     private void addSwitch(LinearLayout parent, String title, int icon, int tint, final String key) {
@@ -195,6 +197,35 @@ public class SettingsActivity extends Activity {
         });
         row.findViewById(R.id.swRow).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { sw.toggle(); }
+        });
+        parent.addView(row);
+    }
+
+    private static final int[] BREAK_STEPS = {30, 45, 60, 90, 120};
+
+    /** Baris "Ingatkan setiap": ketuk untuk berganti 30 / 45 / 60 / 90 / 120 menit. */
+    private void addIntervalRow(LinearLayout parent) {
+        View row = getLayoutInflater().inflate(R.layout.row_perm, parent, false);
+        row.findViewById(R.id.permDivider).setVisibility(View.VISIBLE);
+        row.findViewById(R.id.permTile).setBackgroundTintList(ColorStateList.valueOf(0xFF5E5CE6));
+        ((ImageView) row.findViewById(R.id.permIcon)).setImageResource(R.drawable.ic_tune);
+        ((TextView) row.findViewById(R.id.permTitle)).setText("Ingatkan setiap");
+        final TextView status = row.findViewById(R.id.permStatus);
+        status.setTextColor(SysInfo.color(this, R.color.accent));
+        status.setText(prefs.getInt("break_min", 60) + " menit");
+        row.findViewById(R.id.permRow).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                int cur = prefs.getInt("break_min", 60);
+                int next = BREAK_STEPS[0];
+                for (int i = 0; i < BREAK_STEPS.length; i++) {
+                    if (BREAK_STEPS[i] == cur) {
+                        next = BREAK_STEPS[(i + 1) % BREAK_STEPS.length];
+                        break;
+                    }
+                }
+                prefs.edit().putInt("break_min", next).apply();
+                status.setText(next + " menit");
+            }
         });
         parent.addView(row);
     }
