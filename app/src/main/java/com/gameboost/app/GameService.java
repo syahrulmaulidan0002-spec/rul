@@ -191,6 +191,12 @@ public class GameService extends Service {
             showPanel();
             if (root != null) openPanel(FIRST_HIDE_MS);   // tampil sebentar lalu masuk ke tepi
         }
+        // Data grafik terus dicatat selama mode game, walau panel sedang tersimpan di tepi layar.
+        if (root != null && !sampling) {
+            startSampling();
+            handler.removeCallbacks(tick);
+            handler.post(tick);
+        }
         if (root != null && requested > 0) {
             flashToast(String.format(Locale.US, "✓ %d aplikasi dihentikan  •  RAM +%d MB",
                     requested, freed));
@@ -519,9 +525,6 @@ public class GameService extends Service {
             }
         });
         refresh();
-        handler.removeCallbacks(tick);
-        handler.postDelayed(tick, 1500);
-        startSampling();
         scheduleAutoHide(hideAfterMs);
     }
 
@@ -530,8 +533,6 @@ public class GameService extends Service {
         if (root == null || !expanded) return;
         expanded = false;
         handler.removeCallbacks(autoHide);
-        handler.removeCallbacks(tick);
-        stopSampling();
         float w = dp(CARD_W_DP);
         card.animate().cancel();
         card.animate().translationX(onRight ? w : -w).alpha(0f).setDuration(240)
@@ -577,7 +578,7 @@ public class GameService extends Service {
 
     /** Dipanggil di thread utama dengan hasil pembacaan terbaru. */
     private void applyStats(SysStats.Snap s) {
-        if (root == null || !expanded) return;
+        if (root == null) return;
 
         Metric cpu = metrics[M_CPU];
         if (s.cpu >= 0) {
@@ -686,7 +687,7 @@ public class GameService extends Service {
 
     /** Bagian yang ringan dan dibaca di thread utama: baterai, suhu, RAM, jenis jaringan. */
     private void refresh() {
-        if (root == null || !expanded) return;
+        if (root == null) return;
         SysInfo.Ram r = SysInfo.ram(this);
         SysInfo.Batt b = SysInfo.battery(this);
         netType = SysStats.networkType(this);
