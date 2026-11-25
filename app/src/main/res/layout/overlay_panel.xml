@@ -122,6 +122,39 @@
             android:layout_marginEnd="-3dp"
             android:orientation="horizontal" />
 
+        <!-- Status internet: fokus ke game / Wi-Fi latensi rendah -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_metric_cell"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="8dp">
+
+            <ImageView
+                android:id="@+id/icNetFocus"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_wifi"
+                android:tint="@color/muted" />
+
+            <TextView
+                android:id="@+id/tvNetFocus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+
         <!-- Suhu + saran singkat -->
         <LinearLayout
             android:layout_width="match_parent"

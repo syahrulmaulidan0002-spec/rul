@@ -44,6 +44,9 @@ final class GameBooster {
     private static final String KEY_PERF_GAME = "perf_game";
     private static final String KEY_PREV_MIN_RR = "prev_min_rr";
     private static final String KEY_PREV_PEAK_RR = "prev_peak_rr";
+    private static final String KEY_NET_ACTIVE = "net_active";
+    private static final String KEY_NET_PREV = "net_prev_restrict";
+    private static final String KEY_NET_UID = "net_uid_added";
     private static final String KEY_RR_CHANGED = "rr_changed";
     private static final String KEY_PREV_LOW_POWER = "prev_low_power";
     private static final Pattern SAFE_PKG = Pattern.compile("[A-Za-z0-9._]+");
@@ -285,7 +288,8 @@ final class GameBooster {
         SharedPreferences sp = state(app);
         Set<String> frozen = new HashSet<>(sp.getStringSet(KEY_SUSPENDED, Collections.<String>emptySet()));
         boolean perf = sp.getBoolean(KEY_PERF_ACTIVE, false);
-        if (frozen.isEmpty() && !perf) return 0;
+        boolean net = sp.getBoolean(KEY_NET_ACTIVE, false);
+        if (frozen.isEmpty() && !perf && !net) return 0;
         if (!ShizukuHelper.ready()) return -1;
 
         StringBuilder sb = new StringBuilder();
@@ -293,12 +297,60 @@ final class GameBooster {
             if (SAFE_PKG.matcher(p).matches()) sb.append("pm unsuspend --user 0 ").append(p).append('\n');
         }
         if (perf) appendPerfRestore(sp, sb);
+        if (net) {
+            if (!sp.getBoolean(KEY_NET_PREV, false)) sb.append("cmd netpolicy set restrict-background false\n");
+            int uid = sp.getInt(KEY_NET_UID, -1);
+            if (uid >= 0) sb.append("cmd netpolicy remove restrict-background-whitelist ").append(uid).append('\n');
+        }
 
         String out = ShizukuHelper.exec(sb.toString());
         if (out == null) return -1;
         sp.edit().remove(KEY_SUSPENDED).putBoolean(KEY_PERF_ACTIVE, false)
-                .putBoolean(KEY_RR_CHANGED, false).apply();
+                .putBoolean(KEY_RR_CHANGED, false)
+                .putBoolean(KEY_NET_ACTIVE, false).apply();
         return frozen.size();
+    }
+
+    // ---------------------------------------------------------------- fokus internet
+
+    /**
+     * Putuskan internet latar belakang: nyalakan Penghemat Data sistem dan beri pengecualian hanya
+     * untuk game. Penghemat Data berlaku untuk data seluler. Aplikasi yang dibekukan sudah tidak
+     * bisa memakai internet sama sekali (tidak berjalan). Setelan semula dikembalikan saat selesai.
+     * Jalankan di thread background. Mengembalikan true jika perintahnya terkirim.
+     */
+    static boolean enableNetFocus(Context ctx, String gamePkg) {
+        if (!ShizukuHelper.ready() || gamePkg == null) return false;
+        Context app = ctx.getApplicationContext();
+        int uid;
+        try {
+            uid = app.getPackageManager().getApplicationInfo(gamePkg, 0).uid;
+        } catch (Exception e) {
+            return false;
+        }
+        SharedPreferences sp = state(app);
+        boolean already = sp.getBoolean(KEY_NET_ACTIVE, false);
+
+        boolean wasOn = false;
+        boolean whitelisted = false;
+        if (!already) {
+            String cur = ShizukuHelper.exec("cmd netpolicy get restrict-background");
+            if (cur == null) return false;
+            wasOn = cur.toLowerCase(Locale.US).contains("enabled");
+            String list = ShizukuHelper.exec("cmd netpolicy list restrict-background-whitelist");
+            whitelisted = list != null && Pattern.compile("\\b" + uid + "\\b").matcher(list).find();
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("cmd netpolicy set restrict-background true\n");
+        if (!already && !whitelisted) sb.append("cmd netpolicy add restrict-background-whitelist ").append(uid).append('\n');
+        if (ShizukuHelper.exec(sb.toString()) == null) return false;
+
+        if (!already) {
+            sp.edit().putBoolean(KEY_NET_ACTIVE, true).putBoolean(KEY_NET_PREV, wasOn)
+                    .putInt(KEY_NET_UID, whitelisted ? -1 : uid).apply();
+        }
+        return true;
     }
 
     // ---------------------------------------------------------------- mode performa

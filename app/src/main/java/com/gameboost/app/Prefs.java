@@ -12,7 +12,7 @@ final class Prefs {
         return c.getSharedPreferences("gameboost", Context.MODE_PRIVATE);
     }
 
-    /** Kunci: kill, notif, dnd, overlay, freeze, deep, downscale, perf (nyala); freeform, panel_left (mati). */
+    /** Kunci: kill, notif, dnd, overlay, freeze, deep, downscale, netfocus, perf (nyala); freeform, panel_left (mati). */
     static boolean flag(Context c, String key) {
         boolean def = !("freeform".equals(key) || "panel_left".equals(key));
         return get(c).getBoolean(key, def);

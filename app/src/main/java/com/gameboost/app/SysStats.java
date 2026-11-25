@@ -25,6 +25,8 @@ final class SysStats {
     static final class Snap {
         int cpu = -1;            // persen, -1 = tidak tersedia
         int gpu = -1;
+        boolean gpuByFreq;       // true = GPU diperkirakan dari frekuensi
+        String gpuModel;         // mis. "Adreno610" (Snapdragon), bila terbaca
         boolean cpuByFreq;       // true = hanya perkiraan dari frekuensi
         long rxBps = -1;         // byte per detik, -1 = belum ada
         long txBps = -1;
@@ -32,6 +34,8 @@ final class SysStats {
 
     private static final String[] GPU_FILES = {
             "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+            "/sys/class/kgsl/kgsl-3d0/devfreq/gpu_load",
+            "/sys/class/kgsl/kgsl-3d0/gpubusy",
             "/sys/kernel/gpu/gpu_busy",
             "/sys/kernel/ged/hal/gpu_utilization",
             "/sys/class/kgsl/kgsl-3d0/gpubusy",
@@ -53,6 +57,10 @@ final class SysStats {
         StringBuilder sb = new StringBuilder("head -n 1 /proc/stat\nfor f in");
         for (String f : GPU_FILES) sb.append(' ').append(f);
         sb.append("; do if [ -r \"$f\" ]; then echo \"GPUFILE:$f\"; head -c 200 \"$f\"; echo; break; fi; done\n");
+        // Snapdragon (Adreno): frekuensi dan nama GPU sebagai cadangan bila beban tidak terbaca
+        sb.append("echo GPUCLK\ncat /sys/class/kgsl/kgsl-3d0/gpuclk 2>/dev/null\n");
+        sb.append("cat /sys/class/kgsl/kgsl-3d0/max_gpuclk 2>/dev/null\n");
+        sb.append("echo GPUMODEL\ncat /sys/class/kgsl/kgsl-3d0/gpu_model 2>/dev/null\necho END\n");
         return sb.toString();
     }
 
@@ -61,14 +69,35 @@ final class SysStats {
         String cpuLine = null;
         String gpuFile = null;
         String gpuText = null;
+        String model = null;
+        long clkCur = 0;
+        long clkMax = 0;
 
         if (ShizukuHelper.ready()) {
             String out = ShizukuHelper.exec(SCRIPT);
             if (out != null) {
                 String[] lines = out.split("\n");
+                String section = null;
+                int clkIdx = 0;
                 for (int i = 0; i < lines.length; i++) {
                     String l = lines[i];
-                    if (l.startsWith("cpu ") && cpuLine == null) {
+                    if (l.equals("GPUCLK")) {
+                        section = "clk";
+                        clkIdx = 0;
+                    } else if (l.equals("GPUMODEL")) {
+                        section = "model";
+                    } else if (l.equals("END")) {
+                        section = null;
+                    } else if ("clk".equals(section)) {
+                        try {
+                            long v = Long.parseLong(l.trim());
+                            if (clkIdx == 0) clkCur = v; else clkMax = v;
+                            clkIdx++;
+                        } catch (NumberFormatException ignored) {
+                        }
+                    } else if ("model".equals(section)) {
+                        if (!l.trim().isEmpty()) model = l.trim();
+                    } else if (l.startsWith("cpu ") && cpuLine == null) {
                         cpuLine = l;
                     } else if (l.startsWith("GPUFILE:")) {
                         gpuFile = l.substring(8);
@@ -100,6 +129,11 @@ final class SysStats {
             }
         }
         s.gpu = gpuPercent(gpuFile, gpuText);
+        s.gpuModel = model;
+        if (s.gpu < 0 && clkCur > 0 && clkMax > 0) {
+            s.gpu = (int) Math.max(0, Math.min(100, Math.round(100.0 * clkCur / clkMax)));
+            s.gpuByFreq = true;
+        }
 
         long now = SystemClock.elapsedRealtime();
         long rx = TrafficStats.getTotalRxBytes();

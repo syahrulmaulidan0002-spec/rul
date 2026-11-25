@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     static final String EXTRA_KILL = "kill";
     static final String EXTRA_NOTIF = "notif";
     static final String EXTRA_FREEZE = "freeze";
+    static final String EXTRA_NETFOCUS = "netfocus";
 
     private static final String KEY_MY_GAMES = "my_games";
 
@@ -310,6 +311,7 @@ public class MainActivity extends Activity {
         final boolean overlay = Prefs.flag(this, "overlay");
         final boolean freeze = Prefs.flag(this, "freeze");
         final boolean perf = Prefs.flag(this, "perf");
+        final boolean netfocus = Prefs.flag(this, "netfocus");
 
         String missing = missingPermissions();
         if (missing != null) {
@@ -320,7 +322,7 @@ public class MainActivity extends Activity {
 
         final boolean shizuku = ShizukuHelper.ready();
         final boolean freezeOn = freeze && shizuku;
-        if ((freeze || perf) && !shizuku) {
+        if ((freeze || perf || netfocus) && !shizuku) {
             toast("Shizuku belum aktif, memakai cara biasa. Ketuk kartu Shizuku untuk panduannya.");
         }
 
@@ -331,6 +333,8 @@ public class MainActivity extends Activity {
             @Override public void run() {
                 final GameBooster.Result r = kill ? GameBooster.boost(MainActivity.this, game.pkg, freezeOn) : null;
                 if (perf && shizuku) GameBooster.enablePerf(MainActivity.this, game.pkg);
+                final boolean netOk = netfocus && shizuku
+                        && GameBooster.enableNetFocus(MainActivity.this, game.pkg);
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         if (dnd) GameBooster.enableDnd(MainActivity.this);
@@ -341,6 +345,7 @@ public class MainActivity extends Activity {
                         s.putExtra(EXTRA_KILL, kill);
                         s.putExtra(EXTRA_NOTIF, notif);
                         s.putExtra(EXTRA_FREEZE, freezeOn);
+                        s.putExtra(EXTRA_NETFOCUS, netOk);
                         if (r != null) {
                             s.putExtra(EXTRA_FREED, r.freedMb);
                             s.putExtra(EXTRA_REQUESTED, r.requested);

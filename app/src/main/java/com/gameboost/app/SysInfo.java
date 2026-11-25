@@ -55,6 +55,25 @@ final class SysInfo {
         return b;
     }
 
+    /** Nama chipset, mis. "Snapdragon SM6225". */
+    static String chipset() {
+        String man = "";
+        String model = "";
+        if (Build.VERSION.SDK_INT >= 31) {
+            man = Build.SOC_MANUFACTURER == null ? "" : Build.SOC_MANUFACTURER;
+            model = Build.SOC_MODEL == null ? "" : Build.SOC_MODEL;
+        }
+        if (model.isEmpty() || "unknown".equalsIgnoreCase(model)) {
+            model = Build.HARDWARE == null ? "" : Build.HARDWARE;
+        }
+        String lm = man.toLowerCase(Locale.US);
+        String lh = (Build.HARDWARE == null ? "" : Build.HARDWARE).toLowerCase(Locale.US);
+        if (lm.contains("qualcomm") || lh.equals("qcom")) {
+            return ("Snapdragon " + (model.equalsIgnoreCase("qcom") ? "" : model)).trim();
+        }
+        return (man + " " + model).trim();
+    }
+
     /** Saran setelan grafis (untuk Mobile Legends dan game sejenis) berdasarkan RAM. */
     static String advice(Context c) {
         Ram r = ram(c);
@@ -70,7 +89,8 @@ final class SysInfo {
         } else {
             tips = "Grafis: HD/Ultra  •  Frame rate: Tinggi/Ultra";
         }
-        return head + "\n" + tips;
+        String chip = chipset();
+        return (chip.isEmpty() ? "" : "Chipset: " + chip + "\n") + head + "\n" + tips;
     }
 
     static int color(Context c, int resId) {

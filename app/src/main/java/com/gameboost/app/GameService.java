@@ -13,6 +13,7 @@ import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -68,6 +69,10 @@ public class GameService extends Service {
     private BatteryView battery, handleBattery;
     private TextView handleBattText;
     private boolean battReceiverOn = false;
+    private boolean netFocus = false;
+    private WifiManager.WifiLock wifiLock;
+    private ImageView icNetFocus;
+    private TextView tvNetFocus;
     private TextView tvBatt, tvTemp, tvHint, tvToast, tvClean;
     private final Metric[] metrics = new Metric[4];     // CPU, GPU, RAM, Internet
     private static final int M_CPU = 0, M_GPU = 1, M_RAM = 2, M_NET = 3;
@@ -166,6 +171,7 @@ public class GameService extends Service {
             killLoop = intent.getBooleanExtra(MainActivity.EXTRA_KILL, true);
             blockNotifs = intent.getBooleanExtra(MainActivity.EXTRA_NOTIF, false);
             freezeMode = intent.getBooleanExtra(MainActivity.EXTRA_FREEZE, false);
+            netFocus = intent.getBooleanExtra(MainActivity.EXTRA_NETFOCUS, false);
         }
 
         // Android 14+ mewajibkan tipe layanan foreground.
@@ -175,6 +181,7 @@ public class GameService extends Service {
             startForeground(NOTIF_ID, buildNotification());
         }
         running = true;
+        if (Prefs.flag(this, "netfocus") && wifiLock == null) acquireWifiLock();
 
         if (blockNotifs) GameNotifService.clearAll();
         handler.removeCallbacks(watchdog);
@@ -198,6 +205,13 @@ public class GameService extends Service {
         handler.removeCallbacks(autoHide);
         handler.removeCallbacks(watchdog);
         stopSampling();
+        if (wifiLock != null) {
+            try {
+                if (wifiLock.isHeld()) wifiLock.release();
+            } catch (Exception ignored) {
+            }
+            wifiLock = null;
+        }
         if (battReceiverOn) {
             try {
                 unregisterReceiver(battReceiver);
@@ -306,6 +320,8 @@ public class GameService extends Service {
         battery = root.findViewById(R.id.battery);
         handleBattery = root.findViewById(R.id.handleBattery);
         handleBattText = root.findViewById(R.id.handleBattText);
+        icNetFocus = root.findViewById(R.id.icNetFocus);
+        tvNetFocus = root.findViewById(R.id.tvNetFocus);
         tvBatt = root.findViewById(R.id.tvBatt);
         tvTemp = root.findViewById(R.id.tvTemp);
         tvHint = root.findViewById(R.id.tvHint);
@@ -376,6 +392,7 @@ public class GameService extends Service {
             battReceiverOn = true;
         }
         updateBattery();
+        updateNetChip();
 
         // Gagang di tepi layar tidak boleh dikalahkan oleh gestur "kembali" sistem (Android 10+).
         if (Build.VERSION.SDK_INT >= 29) {
@@ -576,7 +593,8 @@ public class GameService extends Service {
         if (s.gpu >= 0) {
             gpu.value.setText(s.gpu + "%");
             gpu.spark.push(s.gpu);
-            gpu.sub.setText("beban grafis");
+            String name = s.gpuModel != null ? s.gpuModel : "beban grafis";
+            gpu.sub.setText(s.gpuByFreq ? name + " • dari frekuensi" : name);
         } else {
             gpu.value.setText("—");
             gpu.sub.setText(ShizukuHelper.ready() ? "tidak tersedia di HP ini" : "butuh Shizuku");
@@ -622,6 +640,38 @@ public class GameService extends Service {
         tvToast.setVisibility(View.VISIBLE);
         handler.removeCallbacks(hideToast);
         handler.postDelayed(hideToast, 4500);
+    }
+
+    /** Minta Wi-Fi tetap aktif dan, di Android 10+, memakai mode latensi rendah selama bermain. */
+    @SuppressWarnings("deprecation")
+    private void acquireWifiLock() {
+        try {
+            WifiManager w = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (w == null) return;
+            int mode = Build.VERSION.SDK_INT >= 29 ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                    : WifiManager.WIFI_MODE_FULL_HIGH_PERF;
+            WifiManager.WifiLock l = w.createWifiLock(mode, "GameBoost");
+            l.setReferenceCounted(false);
+            l.acquire();
+            wifiLock = l;
+        } catch (Exception e) {
+            wifiLock = null;
+        }
+    }
+
+    /** Ikon dan teks status internet di panel: hijau jika fokus ke game aktif. */
+    private void updateNetChip() {
+        if (tvNetFocus == null) return;
+        boolean wifi = wifiLock != null;
+        String text;
+        if (netFocus && wifi) text = "Fokus ke game  •  Wi-Fi latensi rendah";
+        else if (netFocus) text = "Internet latar belakang diputus";
+        else if (wifi) text = "Wi-Fi latensi rendah (tanpa Shizuku)";
+        else text = "Internet latar belakang belum dibatasi";
+        int color = SysInfo.color(this, netFocus || wifi ? R.color.ok : R.color.muted);
+        tvNetFocus.setText(text);
+        tvNetFocus.setTextColor(color);
+        icNetFocus.setColorFilter(color);
     }
 
     /** Samakan semua ikon baterai (gagang + panel) dengan level baterai asli. */
