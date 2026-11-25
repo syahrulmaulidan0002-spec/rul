@@ -332,7 +332,11 @@ final class GameBooster {
         StringBuilder sb = new StringBuilder();
         SharedPreferences.Editor ed = sp.edit();
 
-        if (Build.VERSION.SDK_INT >= 31) {
+        if (Build.VERSION.SDK_INT >= 33 && Prefs.flag(app, "downscale")) {
+            // Android 13+: render game di resolusi 80% lalu diperbesar ke layar. Beban GPU turun,
+            // FPS naik. Dikembalikan lewat "cmd game reset".
+            sb.append("cmd game set --mode performance --downscale 0.8 ").append(gamePkg).append('\n');
+        } else if (Build.VERSION.SDK_INT >= 31) {
             sb.append("cmd game mode performance ").append(gamePkg).append('\n');
         }
 
