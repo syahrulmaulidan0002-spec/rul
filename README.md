@@ -63,6 +63,20 @@ Tanpa Shizuku, aplikasi tetap bekerja dengan cara biasa.
 - **Jendela mengambang**: cincin RAM, suhu, baterai, tombol **Bersihkan** dan **Selesai**. Seret
   untuk memindahkan, ketuk **−** untuk menjadi pil kecil yang menempel ke tepi layar.
 
+## Fitur otomatis dan pelengkap
+
+- **Aktif otomatis saat game dibuka**: layanan siaga membaca game yang sedang dibuka (butuh izin
+  *Akses penggunaan*), lalu menyalakan mode game sendiri dan mengakhirinya saat game ditinggalkan.
+  Di HyperOS/Xiaomi nyalakan Autostart agar layanan tidak dimatikan sistem.
+- **Animasi masuk game** (gaya iOS): langkah yang benar-benar berjalan tampil satu per satu, lalu game
+  terbuka. Ketuk layar untuk mempercepat; bisa dimatikan di Pengaturan.
+- **Notifikasi yang terlewat**: hanya hitungan per aplikasi yang disimpan, bukan isi pesan.
+- **Ringkasan sesi**: lama main, RAM yang dilegakan, aplikasi dibekukan, suhu tertinggi, rata-rata
+  CPU/GPU (jika terbaca), dan notifikasi terlewat. Tampil di beranda dan sebagai notifikasi.
+- **Skor kesiapan** (0-100) dari RAM, suhu, baterai, dan sisa penyimpanan, dengan saran satu baris.
+- **Widget layar utama**: ketuk untuk langsung main game terpilih.
+- **Pengingat istirahat**: interval 30-120 menit, bisa diatur atau dimatikan.
+
 ## Batasan yang jujur
 
 - Shizuku harus dinyalakan ulang setiap HP restart (kecuali dinyalakan lewat root). Beberapa HP,
@@ -93,6 +107,9 @@ app/src/main/java/com/gameboost/app/
   GameNotifService.java   penghapus notifikasi selama mode game
   GameBooster.java        tutup/bekukan aplikasi, mode performa, Jangan Ganggu, root opsional
   SparkView/BatteryView/SysStats.java  grafik panel (CPU, GPU, internet) dan ikon baterai
+  LaunchActivity/LaunchRing.java  animasi masuk game
+  SessionRunner/SessionStats.java  persiapan mode game dan ringkasan sesi
+  GameWidget/BootReceiver.java     widget layar utama dan siaga setelah restart
   SettingsActivity.java   halaman Pengaturan (izin & saklar)
   GuideActivity.java      panduan langkah demi langkah (Shizuku, root, cara pakai)
   ShizukuHelper.java      status, izin, dan perintah shell lewat Shizuku

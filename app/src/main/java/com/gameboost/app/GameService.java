@@ -768,7 +768,15 @@ public class GameService extends Service {
             @Override public void onClick(View v) { closePanel(); }
         });
         root.findViewById(R.id.btnStop).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { stopSelf(); }
+            @Override public void onClick(View v) {
+                // Akhiri sesi saja; layanan siaga (aktif otomatis) tetap hidup.
+                handler.post(new Runnable() {
+                    @Override public void run() {
+                        suppressPkg = gamePkg;
+                        endGame(false);
+                    }
+                });
+            }
         });
         btnClean.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { cleanNow(); }

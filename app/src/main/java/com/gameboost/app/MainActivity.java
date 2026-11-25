@@ -159,7 +159,8 @@ public class MainActivity extends Activity {
         btnMain.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 if (GameService.running) {
-                    stopService(new Intent(MainActivity.this, GameService.class));
+                    startService(new Intent(MainActivity.this, GameService.class)
+                            .setAction(GameService.ACTION_STOP));
                     updateBottom();
                 } else {
                     startMode();
