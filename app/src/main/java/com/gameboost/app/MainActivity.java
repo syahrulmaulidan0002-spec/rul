@@ -59,7 +59,7 @@ public class MainActivity extends Activity {
     private final List<GameItem> others = new ArrayList<>();   // daftar aplikasi lain
     private GameAdapter adapter;
     private String selectedPkg;
-    private String heroPkg = "";
+    private String heroPkg = null; // null = belum pernah digambar
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private ListView list;
