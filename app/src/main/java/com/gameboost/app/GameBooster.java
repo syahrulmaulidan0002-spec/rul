@@ -44,6 +44,7 @@ final class GameBooster {
     private static final String KEY_PERF_GAME = "perf_game";
     private static final String KEY_PREV_MIN_RR = "prev_min_rr";
     private static final String KEY_PREV_PEAK_RR = "prev_peak_rr";
+    private static final String KEY_RR_CHANGED = "rr_changed";
     private static final String KEY_PREV_LOW_POWER = "prev_low_power";
     private static final Pattern SAFE_PKG = Pattern.compile("[A-Za-z0-9._]+");
 
@@ -75,13 +76,11 @@ final class GameBooster {
                 sb.append("am force-stop ").append(p).append('\n');
                 if (freeze) sb.append("pm suspend --user 0 ").append(p).append('\n');
             }
+            if (freeze) rememberSuspended(app, targets);
             String out = ShizukuHelper.exec(sb.toString());
             if (out != null) {
                 res.method = ShizukuHelper.isRoot() ? "Shizuku (root)" : "Shizuku";
-                if (freeze) {
-                    res.frozen = countOccurrences(out, "suspended state: true");
-                    rememberSuspended(app, targets);
-                }
+                if (freeze) res.frozen = countOccurrences(out, "suspended state: true");
             }
         }
 
@@ -177,6 +176,9 @@ final class GameBooster {
         keep.add("com.google.android.dialer");
         keep.add("com.google.android.gms");
         keep.add("com.google.android.gsf");
+        keep.add("com.android.vending");              // Play Store: sebagian game memeriksa lisensi
+        keep.add("com.google.android.deskclock");     // jam & alarm tetap boleh berbunyi
+        keep.add("com.android.deskclock");
         // HyperOS/MIUI: pusat keamanan dan manajer daya jangan disentuh
         keep.add("com.miui.securitycenter");
         keep.add("com.miui.powerkeeper");
@@ -249,7 +251,8 @@ final class GameBooster {
 
         String out = ShizukuHelper.exec(sb.toString());
         if (out == null) return -1;
-        sp.edit().remove(KEY_SUSPENDED).putBoolean(KEY_PERF_ACTIVE, false).apply();
+        sp.edit().remove(KEY_SUSPENDED).putBoolean(KEY_PERF_ACTIVE, false)
+                .putBoolean(KEY_RR_CHANGED, false).apply();
         return frozen.size();
     }
 
@@ -291,6 +294,7 @@ final class GameBooster {
         float max = maxRefreshRate(app);
         if (max > 61f) {
             if (!already) {
+                ed.putBoolean(KEY_RR_CHANGED, true);
                 ed.putFloat(KEY_PREV_MIN_RR, Settings.System.getFloat(cr, "min_refresh_rate", -1f));
                 ed.putFloat(KEY_PREV_PEAK_RR, Settings.System.getFloat(cr, "peak_refresh_rate", -1f));
             }
@@ -317,8 +321,10 @@ final class GameBooster {
         if (Build.VERSION.SDK_INT >= 31 && game != null && SAFE_PKG.matcher(game).matches()) {
             sb.append("cmd game reset ").append(game).append('\n');
         }
-        appendRestoreSetting(sb, "min_refresh_rate", sp.getFloat(KEY_PREV_MIN_RR, -1f));
-        appendRestoreSetting(sb, "peak_refresh_rate", sp.getFloat(KEY_PREV_PEAK_RR, -1f));
+        if (sp.getBoolean(KEY_RR_CHANGED, false)) {
+            appendRestoreSetting(sb, "min_refresh_rate", sp.getFloat(KEY_PREV_MIN_RR, -1f));
+            appendRestoreSetting(sb, "peak_refresh_rate", sp.getFloat(KEY_PREV_PEAK_RR, -1f));
+        }
         if (sp.getInt(KEY_PREV_LOW_POWER, 0) == 1) {
             sb.append("settings put global low_power 1\n");
         }

@@ -1,195 +1,152 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Panduan Shizuku: daftar status yang dipantau langsung (hijau = beres, merah = belum). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/rootGuide"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
-    android:orientation="vertical"
-    android:paddingStart="24dp"
-    android:paddingTop="16dp"
-    android:paddingEnd="24dp"
-    android:paddingBottom="16dp">
+    android:orientation="vertical">
 
-    <!-- Titik penanda langkah -->
     <LinearLayout
-        android:id="@+id/gDots"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingTop="8dp" />
+        android:paddingStart="8dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="4dp">
+
+        <FrameLayout
+            android:id="@+id/gBack"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:clickable="true">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="Kembali"
+                android:rotation="180"
+                android:src="@drawable/ic_chevron_right"
+                android:tint="@color/accent" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:text="Panduan Shizuku"
+            android:textColor="@color/text"
+            android:textSize="22sp" />
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true"
         android:overScrollMode="never"
         android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:paddingTop="36dp">
+            android:paddingStart="16dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="32dp">
+
+            <!-- Ringkasan: hijau jika semuanya siap, merah jika belum -->
+            <LinearLayout
+                android:id="@+id/gSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="18dp">
+
+                <FrameLayout
+                    android:id="@+id/gSumDot"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/dot_step">
+
+                    <ImageView
+                        android:id="@+id/gSumIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:tint="@color/text" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/gSumTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/text"
+                        android:textSize="19sp" />
+
+                    <TextView
+                        android:id="@+id/gSumSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/muted"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/gStep"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.2"
-                android:text="MULAI"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="22dp"
+                android:layout_marginBottom="8dp"
+                android:letterSpacing="0.06"
+                android:text="STATUS (DIPANTAU OTOMATIS)"
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
 
-            <FrameLayout
-                android:id="@+id/gTile"
-                android:layout_width="88dp"
-                android:layout_height="88dp"
-                android:layout_marginTop="22dp"
-                android:background="@drawable/bg_tile_big">
-
-                <ImageView
-                    android:id="@+id/gIcon"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@null"
-                    android:tint="@color/text" />
-            </FrameLayout>
-
-            <TextView
-                android:id="@+id/gTitle"
+            <LinearLayout
+                android:id="@+id/gRows"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="26dp"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center"
-                android:text="-"
-                android:textColor="@color/text"
-                android:textSize="26sp" />
+                android:background="@drawable/bg_card"
+                android:orientation="vertical" />
 
             <TextView
-                android:id="@+id/gBody"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center"
-                android:lineSpacingExtra="4dp"
-                android:text="-"
-                android:textColor="@color/muted"
-                android:textSize="16sp" />
-
-            <TextView
-                android:id="@+id/gStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:fontFamily="sans-serif-medium"
-                android:text=""
-                android:textSize="15sp" />
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="22dp"
+                android:layout_marginBottom="8dp"
+                android:letterSpacing="0.06"
+                android:text="CARA PAKAI"
+                android:textColor="@color/muted"
+                android:textSize="12sp" />
 
-            <Button
-                android:id="@+id/gAction"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="18dp"
-                android:background="@drawable/bg_btn_tint_blue"
-                android:fontFamily="sans-serif-medium"
-                android:stateListAnimator="@null"
-                android:text="Buka"
-                android:textAllCaps="false"
-                android:textColor="@color/accent"
-                android:textSize="16sp" />
-
-            <!-- Pilihan cara (layar pertama) -->
-            <LinearLayout
-                android:id="@+id/gChoices"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <Button
-                    android:id="@+id/gPathNoRoot"
-                    android:layout_width="match_parent"
-                    android:layout_height="54dp"
-                    android:background="@drawable/bg_button"
-                    android:fontFamily="sans-serif-medium"
-                    android:stateListAnimator="@null"
-                    android:text="HP saya belum root"
-                    android:textAllCaps="false"
-                    android:textColor="@color/on_accent"
-                    android:textSize="16sp" />
-
-                <Button
-                    android:id="@+id/gPathRoot"
-                    android:layout_width="match_parent"
-                    android:layout_height="54dp"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_btn_tint_blue"
-                    android:fontFamily="sans-serif-medium"
-                    android:stateListAnimator="@null"
-                    android:text="HP saya sudah root"
-                    android:textAllCaps="false"
-                    android:textColor="@color/accent"
-                    android:textSize="16sp" />
-
-                <Button
-                    android:id="@+id/gPathSkip"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="6dp"
-                    android:background="@null"
-                    android:stateListAnimator="@null"
-                    android:text="Lewati, pakai cara biasa"
-                    android:textAllCaps="false"
-                    android:textColor="@color/muted"
-                    android:textSize="15sp" />
-            </LinearLayout>
+                android:background="@drawable/bg_card"
+                android:lineSpacingExtra="6dp"
+                android:padding="18dp"
+                android:text="1. Ketuk game di beranda.\n2. Ketuk Mulai Mode Game. Aplikasi lain dibekukan.\n3. Selesai main, ketuk Selesai di jendela mengambang."
+                android:textColor="@color/text"
+                android:textSize="15sp" />
         </LinearLayout>
     </ScrollView>
-
-    <!-- Tombol bawah -->
-    <LinearLayout
-        android:id="@+id/gBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingTop="8dp">
-
-        <TextView
-            android:id="@+id/gBack"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:clickable="true"
-            android:padding="12dp"
-            android:text="Kembali"
-            android:textColor="@color/muted"
-            android:textSize="16sp" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <Button
-            android:id="@+id/gNext"
-            android:layout_width="wrap_content"
-            android:layout_height="50dp"
-            android:background="@drawable/bg_button"
-            android:fontFamily="sans-serif-medium"
-            android:minWidth="140dp"
-            android:paddingStart="28dp"
-            android:paddingEnd="28dp"
-            android:stateListAnimator="@null"
-            android:text="Lanjut"
-            android:textAllCaps="false"
-            android:textColor="@color/on_accent"
-            android:textSize="17sp" />
-    </LinearLayout>
 </LinearLayout>

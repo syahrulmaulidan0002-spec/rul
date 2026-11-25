@@ -4,15 +4,18 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Insets;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
-import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -20,53 +23,58 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Panduan langkah demi langkah: menyalakan Shizuku (tanpa root atau dengan root) lalu cara
- * memakai GameBoost. Setiap langkah dicek otomatis dan pindah sendiri saat sudah beres.
+ * Panduan Shizuku berupa daftar status yang dipantau terus-menerus:
+ * hijau = sudah beres, merah = belum (disertai petunjuk singkat dan tombol).
  */
 public class GuideActivity extends Activity {
 
     private interface Check { boolean ok(); }
 
-    private static final class Step {
-        final String title, body, action;
-        final int icon, tint;
+    private static final int REQ_SHIZUKU = 100;
+    private static final int POLL_MS = 1000;
+
+    private static final class Row {
+        final String title, hintRed, hintGreen, action;
         final Runnable run;
         final Check check;
-        final boolean choose;
+        final Check visible;       // null = selalu tampil
+        final boolean required;    // ikut menentukan status "siap"
+        View root, divider, dot;
+        ImageView icon;
+        TextView hint, btn;
+        boolean ok;
 
-        Step(String title, String body, int icon, int tint, String action, Runnable run,
-             Check check, boolean choose) {
+        Row(String title, String hintRed, String hintGreen, String action, Runnable run,
+            Check check, Check visible, boolean required) {
             this.title = title;
-            this.body = body;
-            this.icon = icon;
-            this.tint = tint;
+            this.hintRed = hintRed;
+            this.hintGreen = hintGreen;
             this.action = action;
             this.run = run;
             this.check = check;
-            this.choose = choose;
+            this.visible = visible;
+            this.required = required;
         }
     }
 
-    private static final int REQ_SHIZUKU = 100;
-
-    private final List<Step> steps = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private int index = 0;
-    private boolean startedOk = false;
-    private boolean advancing = false;
+    private final AtomicBoolean testBusy = new AtomicBoolean(false);
+    private volatile boolean testOk = false;
+    private int ticks = 0;
 
-    private TextView gStep, gTitle, gBody, gStatus, gBack;
-    private ImageView gIcon;
-    private View gTile, gChoices;
-    private Button gAction, gNext;
-    private LinearLayout gDots;
+    private View sumDot;
+    private ImageView sumIcon;
+    private TextView sumTitle, sumSub;
 
     private final Runnable poll = new Runnable() {
         @Override public void run() {
-            checkCurrent();
-            handler.postDelayed(this, 800);
+            runTestIfNeeded();
+            refresh();
+            handler.postDelayed(this, POLL_MS);
         }
     };
 
@@ -79,59 +87,29 @@ public class GuideActivity extends Activity {
             findViewById(R.id.rootGuide).setOnApplyWindowInsetsListener((v, insets) -> {
                 Insets i = insets.getInsets(WindowInsets.Type.systemBars()
                         | WindowInsets.Type.displayCutout());
-                v.setPadding(i.left + dp(24), i.top + dp(16), i.right + dp(24), i.bottom + dp(16));
+                v.setPadding(i.left, i.top, i.right, i.bottom);
                 return WindowInsets.CONSUMED;
             });
         }
 
-        gStep = findViewById(R.id.gStep);
-        gTitle = findViewById(R.id.gTitle);
-        gBody = findViewById(R.id.gBody);
-        gStatus = findViewById(R.id.gStatus);
-        gBack = findViewById(R.id.gBack);
-        gIcon = findViewById(R.id.gIcon);
-        gTile = findViewById(R.id.gTile);
-        gChoices = findViewById(R.id.gChoices);
-        gAction = findViewById(R.id.gAction);
-        gNext = findViewById(R.id.gNext);
-        gDots = findViewById(R.id.gDots);
+        findViewById(R.id.gBack).setOnClickListener(v -> finish());
+        sumDot = findViewById(R.id.gSumDot);
+        sumIcon = findViewById(R.id.gSumIcon);
+        sumTitle = findViewById(R.id.gSumTitle);
+        sumSub = findViewById(R.id.gSumSub);
 
-        steps.add(new Step("Mau pakai cara apa?",
-                "Dengan Shizuku, GameBoost bisa membekukan semua aplikasi lain selama kamu main. "
-                        + "Pilih sesuai HP kamu.",
-                R.drawable.ic_gamepad, 0xFF0A84FF, null, null, null, true));
-
-        findViewById(R.id.gPathNoRoot).setOnClickListener(v -> startPath(false));
-        findViewById(R.id.gPathRoot).setOnClickListener(v -> startPath(true));
-        findViewById(R.id.gPathSkip).setOnClickListener(v -> finish());
-
-        gBack.setOnClickListener(v -> {
-            if (index > 0) {
-                index--;
-                show();
-            } else {
-                finish();
-            }
-        });
-        gNext.setOnClickListener(v -> {
-            if (index >= steps.size() - 1) {
-                finish();
-            } else {
-                index++;
-                show();
-            }
-        });
-        gAction.setOnClickListener(v -> {
-            Step s = steps.get(index);
-            if (s.run != null) s.run.run();
-        });
-
-        show();
+        defineRows();
+        LinearLayout box = findViewById(R.id.gRows);
+        for (Row r : rows) {
+            buildRow(box, r);
+        }
+        refresh();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        ticks = 0;
         handler.post(poll);
     }
 
@@ -141,78 +119,181 @@ public class GuideActivity extends Activity {
         super.onPause();
     }
 
-    private int dp(int v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
-    }
+    // ---------------------------------------------------------------- daftar status
 
-    // ---------------------------------------------------------------- isi panduan
+    private void defineRows() {
+        rows.add(new Row("Shizuku terpasang", "Pasang dari Play Store.", "Terpasang",
+                "Pasang", this::openPlayStore, () -> ShizukuHelper.installed(this), null, true));
 
-    private void startPath(boolean root) {
-        while (steps.size() > 1) steps.remove(steps.size() - 1);
+        rows.add(new Row("Opsi pengembang", "Ketuk \"Nomor build\" 7 kali.\nHyperOS: \"Versi OS\" 7 kali.",
+                "Aktif", "Buka", () -> open(new Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)),
+                () -> Settings.Global.getInt(getContentResolver(),
+                        Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1,
+                () -> !ShizukuHelper.running(), false));
 
-        steps.add(new Step("Pasang Shizuku",
-                "Shizuku adalah aplikasi kecil yang memberi GameBoost izin untuk membekukan aplikasi lain. "
-                        + "Pasang dulu dari Play Store.",
-                R.drawable.ic_check, 0xFF30D158, "Buka Play Store", this::openPlayStore,
-                () -> ShizukuHelper.installed(this), false));
+        rows.add(new Row("Debugging nirkabel", "Nyalakan di Opsi pengembang. Wi-Fi harus tersambung.",
+                "Aktif", "Buka", () -> open(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)),
+                () -> Settings.Global.getInt(getContentResolver(), "adb_wifi_enabled", 0) == 1,
+                () -> !ShizukuHelper.running(), false));
 
-        if (root) {
-            steps.add(new Step("Nyalakan Shizuku",
-                    "Buka Shizuku, lalu ketuk \"Start (root)\". Pilih Izinkan di jendela Magisk atau KernelSU. "
-                            + "Pilih \"Selalu\" supaya nyala sendiri tiap HP restart.",
-                    R.drawable.ic_bolt, 0xFF64D2FF, "Buka Shizuku", this::openShizuku,
-                    ShizukuHelper::running, false));
-        } else {
-            steps.add(new Step("Aktifkan Opsi pengembang",
-                    "Buka Pengaturan → Tentang ponsel, lalu ketuk \"Nomor build\" 7 kali.\n"
-                            + "Di HyperOS: ketuk \"Versi OS\" 7 kali.",
-                    R.drawable.ic_tune, 0xFFAF52DE, "Buka Tentang ponsel",
-                    () -> open(new Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)),
-                    () -> Settings.Global.getInt(getContentResolver(),
-                            Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1, false));
+        rows.add(new Row("Shizuku menyala",
+                "Buka Shizuku, lalu:\n• Tanpa root: Pairing → Start\n• Root: Start (root)",
+                "Menyala", "Buka Shizuku", this::openShizuku, ShizukuHelper::running, null, true));
 
-            steps.add(new Step("Nyalakan Debugging nirkabel",
-                    "Di Opsi pengembang, nyalakan \"Debugging nirkabel\". HP harus tersambung ke Wi-Fi.",
-                    R.drawable.ic_window, 0xFF0A84FF, "Buka Opsi pengembang",
-                    () -> open(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)),
-                    () -> Settings.Global.getInt(getContentResolver(), "adb_wifi_enabled", 0) == 1,
-                    false));
-
-            steps.add(new Step("Nyalakan Shizuku",
-                    "Buka Shizuku, ketuk \"Pairing\", masukkan kodenya, lalu ketuk \"Start\".\n"
-                            + "Di HyperOS, nyalakan juga \"Debugging USB (pengaturan keamanan)\" di Opsi pengembang.",
-                    R.drawable.ic_bolt, 0xFF64D2FF, "Buka Shizuku", this::openShizuku,
-                    ShizukuHelper::running, false));
-        }
-
-        steps.add(new Step("Izinkan GameBoost",
-                "Ketuk tombol di bawah, lalu pilih \"Izinkan selalu\".",
-                R.drawable.ic_check, 0xFF30D158, "Beri izin", () -> {
+        rows.add(new Row("Izin GameBoost", "Ketuk Beri izin, pilih \"Izinkan selalu\".",
+                "Diizinkan", "Beri izin", () -> {
                     if (!ShizukuHelper.running()) {
-                        Toast.makeText(this, "Shizuku belum menyala. Ulangi langkah sebelumnya.",
-                                Toast.LENGTH_LONG).show();
+                        toast("Nyalakan Shizuku dulu");
                     } else {
                         ShizukuHelper.requestPermission(REQ_SHIZUKU);
                     }
-                }, ShizukuHelper::granted, false));
+                }, ShizukuHelper::granted, null, true));
 
-        steps.add(new Step("1. Pilih game",
-                "Di layar utama GameBoost, ketuk game yang mau dimainkan sampai ada centang biru.",
-                R.drawable.ic_gamepad, 0xFF32ADE6, null, null, null, false));
+        rows.add(new Row("Mode root (opsional)", "Tanpa root. Tetap bisa membekukan lewat ADB.",
+                "Root aktif", null, null, () -> ShizukuHelper.running() && ShizukuHelper.isRoot(),
+                null, false));
 
-        steps.add(new Step("2. Mulai Mode Game",
-                "Ketuk \"Mulai Mode Game\". Aplikasi lain dibekukan, notifikasi dibisukan, "
-                        + "dan game terbuka sendiri.",
-                R.drawable.ic_bolt, 0xFFFF9F0A, null, null, null, false));
-
-        steps.add(new Step("3. Selesai main",
-                "Ketuk \"Selesai\" di jendela mengambang. Semua aplikasi kembali normal. "
-                        + "Kalau ada ikon yang masih abu-abu, ketuk \"Pulihkan semua\" di layar utama.",
-                R.drawable.ic_check, 0xFF30D158, null, null, null, false));
-
-        index = 1;
-        show();
+        rows.add(new Row("Bisa membekukan aplikasi", "Perintah belum bisa dijalankan.",
+                "Perintah berhasil dijalankan", null, null, () -> testOk, null, true));
     }
+
+    private void buildRow(LinearLayout parent, Row r) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+
+        View div = new View(this);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1) / 2));
+        dlp.setMarginStart(dp(58));
+        div.setLayoutParams(dlp);
+        div.setBackgroundColor(SysInfo.color(this, R.color.stroke));
+        div.setVisibility(parent.getChildCount() == 0 ? View.GONE : View.VISIBLE);
+        wrap.addView(div);
+        r.divider = div;
+
+        LinearLayout line = new LinearLayout(this);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setPadding(dp(16), dp(12), dp(14), dp(12));
+
+        FrameLayout dot = new FrameLayout(this);
+        dot.setLayoutParams(new LinearLayout.LayoutParams(dp(28), dp(28)));
+        dot.setBackgroundResource(R.drawable.dot_step);
+        ImageView ic = new ImageView(this);
+        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER);
+        ic.setLayoutParams(ilp);
+        ic.setColorFilter(0xFFFFFFFF);
+        ic.setContentDescription(null);
+        dot.addView(ic);
+        line.addView(dot);
+        r.dot = dot;
+        r.icon = ic;
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.setMarginStart(dp(14));
+        tlp.setMarginEnd(dp(8));
+        texts.setLayoutParams(tlp);
+
+        TextView title = new TextView(this);
+        title.setText(r.title);
+        title.setTextColor(SysInfo.color(this, R.color.text));
+        title.setTextSize(16f);
+        texts.addView(title);
+
+        TextView hint = new TextView(this);
+        hint.setTextColor(SysInfo.color(this, R.color.muted));
+        hint.setTextSize(13f);
+        hint.setPadding(0, dp(2), 0, 0);
+        texts.addView(hint);
+        r.hint = hint;
+        line.addView(texts);
+
+        if (r.action != null) {
+            TextView btn = new TextView(this);
+            btn.setText(r.action);
+            btn.setTextColor(SysInfo.color(this, R.color.accent));
+            btn.setTextSize(14f);
+            btn.setTypeface(Typeface.DEFAULT_BOLD);
+            btn.setGravity(Gravity.CENTER);
+            btn.setPadding(dp(14), dp(8), dp(14), dp(8));
+            btn.setBackgroundResource(R.drawable.bg_btn_tint_blue);
+            btn.setClickable(true);
+            btn.setOnClickListener(v -> r.run.run());
+            line.addView(btn);
+            r.btn = btn;
+        }
+
+        wrap.addView(line);
+        parent.addView(wrap);
+        r.root = wrap;
+    }
+
+    // ---------------------------------------------------------------- pemantauan
+
+    /** Uji nyata: jalankan perintah "id" lewat Shizuku di thread terpisah. */
+    private void runTestIfNeeded() {
+        ticks++;
+        if (!ShizukuHelper.granted()) {
+            testOk = false;
+            return;
+        }
+        // Jika sudah berhasil, cukup cek ulang tiap 5 detik; jika belum, coba tiap detik.
+        if (testOk && ticks % 5 != 0) return;
+        if (!testBusy.compareAndSet(false, true)) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                boolean ok;
+                try {
+                    String out = ShizukuHelper.exec("id");
+                    ok = out != null && out.contains("uid=");
+                } catch (Throwable t) {
+                    ok = false;
+                } finally {
+                    testBusy.set(false);
+                }
+                testOk = ok;
+            }
+        }).start();
+    }
+
+    private void refresh() {
+        boolean first = true;
+        Row firstBadRequired = null;
+        for (Row r : rows) {
+            boolean show = r.visible == null || r.visible.ok();
+            r.root.setVisibility(show ? View.VISIBLE : View.GONE);
+            if (!show) continue;
+            r.divider.setVisibility(first ? View.GONE : View.VISIBLE);
+            first = false;
+
+            r.ok = r.check.ok();
+            r.dot.setBackgroundTintList(ColorStateList.valueOf(
+                    SysInfo.color(this, r.ok ? R.color.ok : R.color.danger)));
+            r.icon.setImageResource(r.ok ? R.drawable.ic_check : R.drawable.ic_xmark);
+            r.hint.setText(r.ok ? r.hintGreen : r.hintRed);
+            r.hint.setTextColor(SysInfo.color(this, r.ok ? R.color.ok : R.color.muted));
+            if (r.btn != null) r.btn.setVisibility(r.ok ? View.GONE : View.VISIBLE);
+            if (r.required && !r.ok && firstBadRequired == null) firstBadRequired = r;
+        }
+
+        if (firstBadRequired == null) {
+            sumDot.setBackgroundTintList(ColorStateList.valueOf(SysInfo.color(this, R.color.ok)));
+            sumIcon.setImageResource(R.drawable.ic_check);
+            sumTitle.setText("Siap membekukan");
+            sumSub.setText(ShizukuHelper.isRoot() ? "Shizuku aktif • mode root"
+                    : "Shizuku aktif • tanpa root");
+        } else {
+            sumDot.setBackgroundTintList(ColorStateList.valueOf(SysInfo.color(this, R.color.danger)));
+            sumIcon.setImageResource(R.drawable.ic_xmark);
+            sumTitle.setText("Belum siap");
+            sumSub.setText("Selanjutnya: " + firstBadRequired.title);
+        }
+    }
+
+    // ---------------------------------------------------------------- aksi
 
     private void openPlayStore() {
         try {
@@ -227,7 +308,7 @@ public class GuideActivity extends Activity {
     private void openShizuku() {
         Intent i = getPackageManager().getLaunchIntentForPackage(ShizukuHelper.SHIZUKU_PKG);
         if (i == null) {
-            Toast.makeText(this, "Shizuku belum terpasang", Toast.LENGTH_LONG).show();
+            toast("Shizuku belum terpasang");
         } else {
             open(i);
         }
@@ -237,79 +318,15 @@ public class GuideActivity extends Activity {
         try {
             startActivity(i);
         } catch (Exception e) {
-            Toast.makeText(this, "Tidak bisa membuka halaman ini", Toast.LENGTH_LONG).show();
+            toast("Tidak bisa membuka halaman ini");
         }
     }
 
-    // ---------------------------------------------------------------- tampilan
-
-    private void show() {
-        advancing = false;
-        Step s = steps.get(index);
-
-        gStep.setText(index == 0 ? "MULAI" : "LANGKAH " + index + " DARI " + (steps.size() - 1));
-        gTitle.setText(s.title);
-        gBody.setText(s.body);
-        gIcon.setImageResource(s.icon);
-        gTile.setBackgroundTintList(ColorStateList.valueOf(s.tint));
-
-        gChoices.setVisibility(s.choose ? View.VISIBLE : View.GONE);
-        gAction.setVisibility(!s.choose && s.action != null ? View.VISIBLE : View.GONE);
-        if (s.action != null) gAction.setText(s.action);
-
-        gBack.setVisibility(index == 0 ? View.INVISIBLE : View.VISIBLE);
-        gNext.setVisibility(s.choose ? View.GONE : View.VISIBLE);
-        gNext.setText(index == steps.size() - 1 ? "Selesai" : "Lanjut");
-
-        startedOk = s.check != null && s.check.ok();
-        updateStatus(s);
-        buildDots();
+    private void toast(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
     }
 
-    private void updateStatus(Step s) {
-        if (s.check == null) {
-            gStatus.setText("");
-            return;
-        }
-        if (s.check.ok()) {
-            gStatus.setText("✓ Sudah beres");
-            gStatus.setTextColor(SysInfo.color(this, R.color.ok));
-        } else {
-            gStatus.setText("Belum beres");
-            gStatus.setTextColor(SysInfo.color(this, R.color.warn));
-        }
-    }
-
-    /** Dipanggil berkala: perbarui status, dan pindah otomatis bila langkah baru saja beres. */
-    private void checkCurrent() {
-        Step s = steps.get(index);
-        if (s.check == null) return;
-        updateStatus(s);
-        if (!startedOk && !advancing && s.check.ok() && index < steps.size() - 1) {
-            advancing = true;
-            handler.postDelayed(new Runnable() {
-                @Override public void run() {
-                    if (advancing && index < steps.size() - 1) {
-                        index++;
-                        show();
-                    }
-                }
-            }, 700);
-        }
-    }
-
-    private void buildDots() {
-        gDots.removeAllViews();
-        for (int i = 0; i < steps.size(); i++) {
-            View d = new View(this);
-            int size = dp(i == index ? 8 : 6);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
-            lp.setMargins(dp(4), 0, dp(4), 0);
-            d.setLayoutParams(lp);
-            d.setBackgroundResource(R.drawable.dot_step);
-            d.setBackgroundTintList(ColorStateList.valueOf(
-                    i == index ? SysInfo.color(this, R.color.accent) : 0xFF48484A));
-            gDots.addView(d);
-        }
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
     }
 }
