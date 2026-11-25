@@ -4,18 +4,37 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <!-- Gagang (area sentuh 26dp x 96dp, garis terlihat 5dp x 60dp) -->
-    <FrameLayout
+    <!-- Gagang: ikon baterai mini (mengikuti baterai asli) + garis tipis untuk digeser -->
+    <LinearLayout
         android:id="@+id/handle"
-        android:layout_width="26dp"
-        android:layout_height="96dp">
+        android:layout_width="34dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingTop="6dp"
+        android:paddingBottom="10dp">
+
+        <com.gameboost.app.BatteryView
+            android:id="@+id/handleBattery"
+            android:layout_width="24dp"
+            android:layout_height="12dp" />
+
+        <TextView
+            android:id="@+id/handleBattText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="--"
+            android:textColor="#E6FFFFFF"
+            android:textSize="9sp" />
 
         <View
             android:layout_width="5dp"
-            android:layout_height="60dp"
-            android:layout_gravity="center"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
             android:background="@drawable/bg_overlay_handle" />
-    </FrameLayout>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/card"

@@ -5,9 +5,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
@@ -63,7 +65,9 @@ public class GameService extends Service {
     private WindowManager.LayoutParams lp;
     private View root, handle, card, btnClean;
     private ImageView icCollapse;
-    private BatteryView battery;
+    private BatteryView battery, handleBattery;
+    private TextView handleBattText;
+    private boolean battReceiverOn = false;
     private TextView tvBatt, tvTemp, tvHint, tvToast, tvClean;
     private final Metric[] metrics = new Metric[4];     // CPU, GPU, RAM, Internet
     private static final int M_CPU = 0, M_GPU = 1, M_RAM = 2, M_NET = 3;
@@ -85,6 +89,12 @@ public class GameService extends Service {
         @Override public void run() {
             refresh();
             handler.postDelayed(this, 1500);
+        }
+    };
+    /** Baterai berubah (turun/naik): ikon di gagang dan di panel ikut berubah saat itu juga. */
+    private final BroadcastReceiver battReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            updateBattery();
         }
     };
     private final Runnable hideToast = new Runnable() {
@@ -188,6 +198,13 @@ public class GameService extends Service {
         handler.removeCallbacks(autoHide);
         handler.removeCallbacks(watchdog);
         stopSampling();
+        if (battReceiverOn) {
+            try {
+                unregisterReceiver(battReceiver);
+            } catch (Exception ignored) {
+            }
+            battReceiverOn = false;
+        }
         if (sampleThread != null) {
             sampleThread.quitSafely();
             sampleThread = null;
@@ -287,6 +304,8 @@ public class GameService extends Service {
         card = root.findViewById(R.id.card);
         icCollapse = root.findViewById(R.id.icCollapse);
         battery = root.findViewById(R.id.battery);
+        handleBattery = root.findViewById(R.id.handleBattery);
+        handleBattText = root.findViewById(R.id.handleBattText);
         tvBatt = root.findViewById(R.id.tvBatt);
         tvTemp = root.findViewById(R.id.tvTemp);
         tvHint = root.findViewById(R.id.tvHint);
@@ -351,6 +370,12 @@ public class GameService extends Service {
             root = null;
             return;
         }
+
+        if (!battReceiverOn) {
+            registerReceiver(battReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            battReceiverOn = true;
+        }
+        updateBattery();
 
         // Gagang di tepi layar tidak boleh dikalahkan oleh gestur "kembali" sistem (Android 10+).
         if (Build.VERSION.SDK_INT >= 29) {
@@ -597,6 +622,16 @@ public class GameService extends Service {
         tvToast.setVisibility(View.VISIBLE);
         handler.removeCallbacks(hideToast);
         handler.postDelayed(hideToast, 4500);
+    }
+
+    /** Samakan semua ikon baterai (gagang + panel) dengan level baterai asli. */
+    private void updateBattery() {
+        if (root == null) return;
+        SysInfo.Batt b = SysInfo.battery(this);
+        handleBattery.setLevel(b.level, b.charging);
+        handleBattText.setText(b.level + "%");
+        battery.setLevel(b.level, b.charging);
+        tvBatt.setText(String.format(Locale.US, "%d%%", b.level));
     }
 
     /** Bagian yang ringan dan dibaca di thread utama: baterai, suhu, RAM, jenis jaringan. */

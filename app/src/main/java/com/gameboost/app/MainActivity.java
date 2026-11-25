@@ -64,6 +64,7 @@ public class MainActivity extends Activity {
 
     private ListView list;
     private RingView ringRam;
+    private BatteryView mainBattery;
     private ImageView heroIcon;
     private LinearLayout gamesRow;
     private View cardRestore;
@@ -110,6 +111,7 @@ public class MainActivity extends Activity {
         tvRamDetail = header.findViewById(R.id.tvRamDetail);
         tvTemp = header.findViewById(R.id.tvTemp);
         tvBatt = header.findViewById(R.id.tvBatt);
+        mainBattery = header.findViewById(R.id.mainBattery);
         tvGraphics = header.findViewById(R.id.tvGraphics);
         tvCount = header.findViewById(R.id.tvCount);
         tvMineCount = header.findViewById(R.id.tvMineCount);
@@ -495,6 +497,7 @@ public class MainActivity extends Activity {
         tvTemp.setTextColor(SysInfo.color(this,
                 b.tempC >= 43f ? R.color.danger : (b.tempC >= 40f ? R.color.warn : R.color.text)));
         tvBatt.setText(String.format(Locale.US, "%d%%%s", b.level, b.charging ? " ⚡" : ""));
+        mainBattery.setLevel(b.level, b.charging);
     }
 
     private void updateBottom() {
