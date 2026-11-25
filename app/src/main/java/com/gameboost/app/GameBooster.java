@@ -77,6 +77,7 @@ final class GameBooster {
                 if (freeze) sb.append("pm suspend --user 0 ").append(p).append('\n');
             }
             if (freeze) rememberSuspended(app, targets);
+            if (freeze) sb.append("am kill-all\n");          // sisa proses cache ikut dimatikan
             String out = ShizukuHelper.exec(sb.toString());
             if (out != null) {
                 res.method = ShizukuHelper.isRoot() ? "Shizuku (root)" : "Shizuku";
@@ -151,7 +152,39 @@ final class GameBooster {
             if (system && !updated) continue;   // aplikasi inti sistem jangan disentuh
             targets.add(p);
         }
+
+        // Mode "sampai ke akar": semua aplikasi pihak ketiga, termasuk yang tidak punya ikon
+        // peluncur tetapi diam-diam menjalankan layanan di latar belakang.
+        if (deepMode(app)) {
+            String out = ShizukuHelper.exec("pm list packages -3");
+            if (out != null) {
+                for (String line : out.split("\n")) {
+                    line = line.trim();
+                    if (!line.startsWith("package:")) continue;
+                    String p = line.substring(8).trim();
+                    if (!keep.contains(p) && SAFE_PKG.matcher(p).matches()) targets.add(p);
+                }
+            }
+        }
         return targets;
+    }
+
+    /** Mode "sampai ke akar" hanya berlaku jika Shizuku siap, bekukan nyala, dan saklarnya nyala. */
+    private static boolean deepMode(Context app) {
+        return Prefs.flag(app, "deep") && Prefs.flag(app, "freeze") && ShizukuHelper.ready();
+    }
+
+    /** Ambil nama paket dari daftar "paket/kelas:paket/kelas" milik setelan sistem. */
+    private static void addPackagesFrom(Context ctx, String key, Set<String> keep) {
+        try {
+            String v = Settings.Secure.getString(ctx.getContentResolver(), key);
+            if (v == null) return;
+            for (String part : v.split(":")) {
+                ComponentName cn = ComponentName.unflattenFromString(part);
+                if (cn != null) keep.add(cn.getPackageName());
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private static long availMb(ActivityManager am) {
@@ -202,6 +235,18 @@ final class GameBooster {
                     Settings.Secure.DEFAULT_INPUT_METHOD);
             ComponentName cn = ime != null ? ComponentName.unflattenFromString(ime) : null;
             if (cn != null) keep.add(cn.getPackageName());
+        } catch (Exception ignored) {
+        }
+        addPackagesFrom(ctx, "enabled_accessibility_services", keep);   // mis. pembaca layar
+        addPackagesFrom(ctx, "assistant", keep);
+        try {
+            String imes = Settings.Secure.getString(ctx.getContentResolver(), "enabled_input_methods");
+            if (imes != null) {
+                for (String part : imes.split(":")) {
+                    int slash = part.indexOf('/');
+                    if (slash > 0) keep.add(part.substring(0, slash));
+                }
+            }
         } catch (Exception ignored) {
         }
         try {

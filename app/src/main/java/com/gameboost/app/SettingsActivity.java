@@ -165,6 +165,7 @@ public class SettingsActivity extends Activity {
         addSwitch(parent, "Jendela mengambang saat bermain", R.drawable.ic_window, 0xFF0A84FF, "overlay");
         addSwitch(parent, "Panel mengambang di sisi kiri", R.drawable.ic_window, 0xFF5E5CE6, "panel_left");
         addSwitch(parent, "Bekukan, bukan sekadar tutup (Shizuku)", R.drawable.ic_sparkle, 0xFF64D2FF, "freeze");
+        addSwitch(parent, "Bekukan sampai ke akar (termasuk tanpa ikon)", R.drawable.ic_sparkle, 0xFF64D2FF, "deep");
         addSwitch(parent, "Mode performa: refresh rate maks (Shizuku)", R.drawable.ic_bolt, 0xFF30D158, "perf");
         addSwitch(parent, "Buka game di jendela kecil", R.drawable.ic_gamepad, 0xFF32ADE6, "freeform");
     }
