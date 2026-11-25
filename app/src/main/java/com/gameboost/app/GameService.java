@@ -1,6 +1,5 @@
 package com.gameboost.app;
 
-import android.animation.ValueAnimator;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -11,8 +10,10 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.provider.Settings;
@@ -25,15 +26,17 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
-import android.view.animation.OvershootInterpolator;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.util.Collections;
 import java.util.Locale;
 
 /**
- * Layanan mode game. Menampilkan jendela mengambang bergaya iOS:
- * kartu lengkap (cincin RAM, suhu, baterai, tombol) yang bisa dikecilkan menjadi pil mungil,
- * digeser bebas, dan otomatis menempel ke tepi layar. Saat berhenti, Jangan Ganggu dikembalikan.
+ * Layanan mode game. Di tepi layar ada gagang tipis; geser ke dalam dan panel bergaya iOS
+ * meluncur keluar dengan grafik CPU, GPU, RAM, internet, serta ikon baterai. Geser panel ke arah
+ * tepi (atau ketuk di luar panel) untuk menyimpannya lagi. Saat berhenti, Jangan Ganggu dikembalikan.
  */
 public class GameService extends Service {
 
@@ -44,20 +47,38 @@ public class GameService extends Service {
     static final String ACTION_STOP = "com.gameboost.app.action.STOP";
     private static final String CHANNEL = "gameboost_mode";
     private static final int NOTIF_ID = 7;
-    private static final long AUTO_COLLAPSE_MS = 7000;
+    private static final int CARD_W_DP = 300;
+    private static final long AUTO_HIDE_MS = 12000;
+    private static final long FIRST_HIDE_MS = 6000;
+    private static final long SAMPLE_MS = 2000;
     private static final long KILL_INTERVAL_MS = 20000;
+
+    /** Satu kotak grafik di panel. */
+    private static final class Metric {
+        TextView value, sub;
+        SparkView spark;
+    }
 
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
-    private View root, pill, card, btnClean;
-    private RingView ring;
-    private TextView tvPill, tvRam, tvTemp, tvBatt, tvHint, tvToast, tvClean;
+    private View root, handle, card, btnClean;
+    private ImageView icCollapse;
+    private BatteryView battery;
+    private TextView tvBatt, tvTemp, tvHint, tvToast, tvClean;
+    private final Metric[] metrics = new Metric[4];     // CPU, GPU, RAM, Internet
+    private static final int M_CPU = 0, M_GPU = 1, M_RAM = 2, M_NET = 3;
 
-    private boolean expanded = true;
-    private boolean onRight = false;
+    private boolean expanded = false;
+    private boolean onRight = true;
     private boolean cleaning = false;
     private int slop;
     private String gamePkg = "";
+    private String netType = "";
+
+    private HandlerThread sampleThread;
+    private Handler sampleHandler;
+    private SysStats stats;
+    private volatile boolean sampling = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable tick = new Runnable() {
@@ -71,9 +92,21 @@ public class GameService extends Service {
             if (tvToast != null) tvToast.setVisibility(View.GONE);
         }
     };
-    private final Runnable autoCollapse = new Runnable() {
+    private final Runnable autoHide = new Runnable() {
         @Override public void run() {
-            collapse();
+            closePanel();
+        }
+    };
+    private final Runnable sampleTask = new Runnable() {
+        @Override public void run() {
+            SysStats st = stats;
+            if (!sampling || st == null) return;
+            final SysStats.Snap snap = st.sample(getApplicationContext());
+            handler.post(new Runnable() {
+                @Override public void run() { applyStats(snap); }
+            });
+            Handler h = sampleHandler;
+            if (sampling && h != null) h.postDelayed(this, SAMPLE_MS);
         }
     };
 
@@ -137,13 +170,14 @@ public class GameService extends Service {
         handler.removeCallbacks(watchdog);
         handler.postDelayed(watchdog, KILL_INTERVAL_MS);
 
-        if (overlay && canDraw() && root == null) showPanel();
+        if (overlay && canDraw() && root == null) {
+            showPanel();
+            if (root != null) openPanel(FIRST_HIDE_MS);   // tampil sebentar lalu masuk ke tepi
+        }
         if (root != null && requested > 0) {
             flashToast(String.format(Locale.US, "✓ %d aplikasi dihentikan  •  RAM +%d MB",
                     requested, freed));
         }
-        handler.removeCallbacks(tick);
-        handler.post(tick);
         return START_NOT_STICKY;
     }
 
@@ -151,8 +185,13 @@ public class GameService extends Service {
     public void onDestroy() {
         handler.removeCallbacks(tick);
         handler.removeCallbacks(hideToast);
-        handler.removeCallbacks(autoCollapse);
+        handler.removeCallbacks(autoHide);
         handler.removeCallbacks(watchdog);
+        stopSampling();
+        if (sampleThread != null) {
+            sampleThread.quitSafely();
+            sampleThread = null;
+        }
         if (root != null && wm != null) {
             try {
                 wm.removeView(root);
@@ -226,23 +265,46 @@ public class GameService extends Service {
         }
     }
 
+    private Metric addMetric(LinearLayout row, String label, int color, float fixedMax, float autoFloor) {
+        View v = LayoutInflater.from(row.getContext()).inflate(R.layout.cell_metric, row, false);
+        Metric m = new Metric();
+        ((TextView) v.findViewById(R.id.cellLabel)).setText(label);
+        m.value = v.findViewById(R.id.cellValue);
+        m.sub = v.findViewById(R.id.cellSub);
+        m.spark = v.findViewById(R.id.cellSpark);
+        m.spark.setColor(color);
+        m.spark.setFixedMax(fixedMax, autoFloor);
+        row.addView(v);
+        return m;
+    }
+
     private void showPanel() {
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         ContextWrapper themed = new ContextThemeWrapper(this, R.style.Theme_GameBoost);
         root = LayoutInflater.from(themed).inflate(R.layout.overlay_panel, null);
 
-        pill = root.findViewById(R.id.pill);
+        handle = root.findViewById(R.id.handle);
         card = root.findViewById(R.id.card);
-        ring = root.findViewById(R.id.ring);
-        tvPill = root.findViewById(R.id.tvPill);
-        tvRam = root.findViewById(R.id.tvRam);
-        tvTemp = root.findViewById(R.id.tvTemp);
+        icCollapse = root.findViewById(R.id.icCollapse);
+        battery = root.findViewById(R.id.battery);
         tvBatt = root.findViewById(R.id.tvBatt);
+        tvTemp = root.findViewById(R.id.tvTemp);
         tvHint = root.findViewById(R.id.tvHint);
         tvToast = root.findViewById(R.id.tvToast);
         tvClean = root.findViewById(R.id.tvClean);
         btnClean = root.findViewById(R.id.btnClean);
         slop = ViewConfiguration.get(this).getScaledTouchSlop();
+        onRight = !Prefs.flag(this, "panel_left");
+
+        LinearLayout row1 = root.findViewById(R.id.gridRow1);
+        LinearLayout row2 = root.findViewById(R.id.gridRow2);
+        metrics[M_CPU] = addMetric(row1, "CPU", 0xFF0A84FF, 100f, 1f);
+        metrics[M_GPU] = addMetric(row1, "GPU", 0xFFBF5AF2, 100f, 1f);
+        metrics[M_RAM] = addMetric(row2, "RAM", 0xFF30D158, 100f, 1f);
+        metrics[M_NET] = addMetric(row2, "INTERNET", 0xFFFF9F0A, 0f, 64f);   // skala otomatis (KB/s)
+
+        // Panah tutup menunjuk ke arah tepi tempat panel menempel.
+        icCollapse.setRotation(onRight ? 0f : 180f);
 
         int type = Build.VERSION.SDK_INT >= 26
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -253,17 +315,25 @@ public class GameService extends Service {
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                         | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,   // layar tidak redup saat main
                 PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.TOP | Gravity.START;
-        lp.x = dp(10);
-        lp.y = dp(72);
+        lp.gravity = Gravity.TOP | (onRight ? Gravity.END : Gravity.START);
+        lp.x = 0;
+        lp.y = Prefs.get(this).getInt("panel_y", dp(96));
 
-        // Seret di bagian mana pun yang bukan tombol; ketuk pil untuk membuka kartu.
-        root.setOnTouchListener(new DragTouch());
+        handle.setOnTouchListener(new HandleTouch());
+        card.setOnTouchListener(new CardTouch());
+        // Ketukan di luar panel (masuk ke game) menyimpan panel kembali.
+        root.setOnTouchListener(new View.OnTouchListener() {
+            @Override public boolean onTouch(View v, MotionEvent e) {
+                if (e.getActionMasked() == MotionEvent.ACTION_OUTSIDE && expanded) closePanel();
+                return false;
+            }
+        });
 
         root.findViewById(R.id.btnCollapse).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { collapse(); }
+            @Override public void onClick(View v) { closePanel(); }
         });
         root.findViewById(R.id.btnStop).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { stopSelf(); }
@@ -272,144 +342,237 @@ public class GameService extends Service {
             @Override public void onClick(View v) { cleanNow(); }
         });
 
-        pill.setVisibility(View.GONE);
-        card.setVisibility(View.VISIBLE);
+        card.setVisibility(View.GONE);
+        handle.setVisibility(View.VISIBLE);
+        handle.setAlpha(0.75f);
         try {
             wm.addView(root, lp);
         } catch (Exception e) {
             root = null;
             return;
         }
-        scheduleAutoCollapse();
+
+        // Gagang di tepi layar tidak boleh dikalahkan oleh gestur "kembali" sistem (Android 10+).
+        if (Build.VERSION.SDK_INT >= 29) {
+            root.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                @Override public void onLayoutChange(View v, int l, int t, int r, int b,
+                                                     int ol, int ot, int orr, int ob) {
+                    v.setSystemGestureExclusionRects(
+                            Collections.singletonList(new Rect(0, 0, r - l, b - t)));
+                }
+            });
+        }
     }
 
-    /** Menangani seretan bebas dan ketukan pada pil. */
-    private final class DragTouch implements View.OnTouchListener {
-        private int startX, startY;
+    /** Geser gagang ke dalam untuk membuka panel; geser naik/turun untuk memindahkan posisinya. */
+    private final class HandleTouch implements View.OnTouchListener {
         private float downX, downY;
-        private boolean moved;
+        private int startY;
+        private boolean vertical, opened;
 
         @Override
         public boolean onTouch(View v, MotionEvent e) {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    handler.removeCallbacks(autoCollapse);
-                    startX = lp.x;
-                    startY = lp.y;
                     downX = e.getRawX();
                     downY = e.getRawY();
-                    moved = false;
+                    startY = lp.y;
+                    vertical = false;
+                    opened = false;
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dx = e.getRawX() - downX;
                     float dy = e.getRawY() - downY;
-                    if (!moved && Math.hypot(dx, dy) > slop) moved = true;
-                    if (moved) {
-                        lp.x = startX + Math.round(dx);
+                    float inward = onRight ? -dx : dx;
+                    if (!vertical && !opened) {
+                        if (inward > slop * 1.5f && inward > Math.abs(dy)) {
+                            opened = true;
+                            openPanel(AUTO_HIDE_MS);
+                        } else if (Math.abs(dy) > slop && Math.abs(dy) > Math.abs(inward)) {
+                            vertical = true;
+                        }
+                    }
+                    if (vertical) {
                         lp.y = startY + Math.round(dy);
-                        clampToScreen();
+                        clampY();
                         applyLayout();
                     }
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    if (!moved && e.getActionMasked() == MotionEvent.ACTION_UP && !expanded) {
-                        expand();
-                    } else if (!expanded) {
-                        snapToEdge();
-                    } else {
-                        scheduleAutoCollapse();
+                    if (vertical) {
+                        Prefs.get(GameService.this).edit().putInt("panel_y", lp.y).apply();
+                    } else if (!opened) {
+                        openPanel(AUTO_HIDE_MS);          // ketukan biasa juga membuka
                     }
                     return true;
                 default:
-                    return false;
+                    return true;
             }
         }
     }
 
-    private void clampToScreen() {
-        if (root == null) return;
-        int[] s = screen();
-        int w = root.getWidth();
-        int h = root.getHeight();
-        lp.x = Math.max(0, Math.min(lp.x, s[0] - w));
-        lp.y = Math.max(0, Math.min(lp.y, s[1] - h));
+    /** Geser panel ke arah tepi untuk menyimpannya; berhenti di tengah akan kembali terbuka. */
+    private final class CardTouch implements View.OnTouchListener {
+        private float downX;
+
+        @Override
+        public boolean onTouch(View v, MotionEvent e) {
+            float w = dp(CARD_W_DP);
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = e.getRawX();
+                    handler.removeCallbacks(autoHide);
+                    card.animate().cancel();
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float out = onRight ? e.getRawX() - downX : downX - e.getRawX();
+                    card.setTranslationX((onRight ? 1 : -1) * Math.max(0f, Math.min(out, w)));
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL: {
+                    float out = onRight ? e.getRawX() - downX : downX - e.getRawX();
+                    if (out > w * 0.3f) {
+                        closePanel();
+                    } else {
+                        card.animate().translationX(0f).setDuration(180)
+                                .setInterpolator(new DecelerateInterpolator()).start();
+                        scheduleAutoHide(AUTO_HIDE_MS);
+                    }
+                    return true;
+                }
+                default:
+                    return true;
+            }
+        }
     }
 
-    private void animateX(int to) {
-        ValueAnimator a = ValueAnimator.ofInt(lp.x, to);
-        a.setDuration(260);
-        a.setInterpolator(new DecelerateInterpolator());
-        a.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override public void onAnimationUpdate(ValueAnimator an) {
-                lp.x = (Integer) an.getAnimatedValue();
+    private void clampY() {
+        if (root == null) return;
+        int[] s = screen();
+        int h = root.getHeight();
+        lp.y = Math.max(0, Math.min(lp.y, Math.max(0, s[1] - h)));
+    }
+
+    /** Panel meluncur dari tepi layar ke dalam. */
+    private void openPanel(long hideAfterMs) {
+        if (root == null) return;
+        if (expanded) {
+            scheduleAutoHide(hideAfterMs);
+            return;
+        }
+        expanded = true;
+        float w = dp(CARD_W_DP);
+        handle.setVisibility(View.GONE);
+        card.setVisibility(View.VISIBLE);
+        card.setTranslationX(onRight ? w : -w);
+        card.setAlpha(0.4f);
+        card.animate().translationX(0f).alpha(1f).setDuration(300)
+                .setInterpolator(new DecelerateInterpolator(1.6f)).start();
+        root.post(new Runnable() {
+            @Override public void run() {
+                clampY();
                 applyLayout();
             }
         });
-        a.start();
+        refresh();
+        handler.removeCallbacks(tick);
+        handler.postDelayed(tick, 1500);
+        startSampling();
+        scheduleAutoHide(hideAfterMs);
     }
 
-    private void expand() {
-        if (root == null || expanded) return;
-        expanded = true;
-        int[] s = screen();
-        int cw = dp(252);
-
-        pill.setVisibility(View.GONE);
-        card.setVisibility(View.VISIBLE);
-        card.setAlpha(0f);
-        card.setScaleX(0.85f);
-        card.setScaleY(0.85f);
-        card.setPivotX(onRight ? cw : 0);
-        card.setPivotY(0);
-        card.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(280)
-                .setInterpolator(new OvershootInterpolator(1.2f)).start();
-
-        animateX(Math.max(dp(8), Math.min(lp.x, s[0] - cw - dp(8))));
-        scheduleAutoCollapse();
-    }
-
-    private void collapse() {
+    /** Panel meluncur kembali ke tepi layar dan tinggal gagang tipisnya. */
+    private void closePanel() {
         if (root == null || !expanded) return;
         expanded = false;
-        handler.removeCallbacks(autoCollapse);
-        card.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f).setDuration(160)
+        handler.removeCallbacks(autoHide);
+        handler.removeCallbacks(tick);
+        stopSampling();
+        float w = dp(CARD_W_DP);
+        card.animate().cancel();
+        card.animate().translationX(onRight ? w : -w).alpha(0f).setDuration(240)
+                .setInterpolator(new DecelerateInterpolator())
                 .withEndAction(new Runnable() {
                     @Override public void run() {
-                        if (root == null) return;
+                        if (root == null || expanded) return;
                         card.setVisibility(View.GONE);
-                        pill.setVisibility(View.VISIBLE);
-                        pill.setAlpha(0f);
-                        pill.setScaleX(0.8f);
-                        pill.setScaleY(0.8f);
-                        pill.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(260)
-                                .setInterpolator(new OvershootInterpolator(1.4f)).start();
-                        snapToEdge();
+                        card.setTranslationX(0f);
+                        handle.setVisibility(View.VISIBLE);
+                        handle.setAlpha(0f);
+                        handle.animate().alpha(0.75f).setDuration(220).start();
                     }
                 }).start();
     }
 
-    /** Pil menempel ke tepi kiri atau kanan, seperti tombol AssistiveTouch di iOS. */
-    private void snapToEdge() {
-        if (root == null) return;
-        int[] s = screen();
-        pill.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        int w = pill.getMeasuredWidth();
-        onRight = lp.x + w / 2 > s[0] / 2;
-        animateX(onRight ? s[0] - w - dp(8) : dp(8));
+    private void scheduleAutoHide(long ms) {
+        handler.removeCallbacks(autoHide);
+        handler.postDelayed(autoHide, ms);
     }
 
-    private void scheduleAutoCollapse() {
-        handler.removeCallbacks(autoCollapse);
-        handler.postDelayed(autoCollapse, AUTO_COLLAPSE_MS);
+    // ---------------------------------------------------------------- data langsung
+
+    private void startSampling() {
+        if (sampleThread == null) {
+            sampleThread = new HandlerThread("gb-sampler");
+            sampleThread.start();
+            sampleHandler = new Handler(sampleThread.getLooper());
+        }
+        stats = new SysStats();                 // sampel baru: CPU dan internet dihitung dari selisih
+        for (Metric m : metrics) {
+            if (m != null) m.spark.clear();
+        }
+        sampling = true;
+        sampleHandler.removeCallbacks(sampleTask);
+        sampleHandler.post(sampleTask);
+    }
+
+    private void stopSampling() {
+        sampling = false;
+        if (sampleHandler != null) sampleHandler.removeCallbacks(sampleTask);
+    }
+
+    /** Dipanggil di thread utama dengan hasil pembacaan terbaru. */
+    private void applyStats(SysStats.Snap s) {
+        if (root == null || !expanded) return;
+
+        Metric cpu = metrics[M_CPU];
+        if (s.cpu >= 0) {
+            cpu.value.setText(s.cpu + "%");
+            cpu.spark.push(s.cpu);
+            cpu.sub.setText(s.cpuByFreq ? "perkiraan dari frekuensi" : "beban prosesor");
+        } else {
+            cpu.value.setText("—");
+            cpu.sub.setText("tidak terbaca");
+        }
+
+        Metric gpu = metrics[M_GPU];
+        if (s.gpu >= 0) {
+            gpu.value.setText(s.gpu + "%");
+            gpu.spark.push(s.gpu);
+            gpu.sub.setText("beban grafis");
+        } else {
+            gpu.value.setText("—");
+            gpu.sub.setText(ShizukuHelper.ready() ? "tidak tersedia di HP ini" : "butuh Shizuku");
+        }
+
+        Metric net = metrics[M_NET];
+        if (s.rxBps >= 0) {
+            net.value.setText("↓ " + SysStats.speed(s.rxBps));
+            net.spark.push(s.rxBps / 1024f);
+            net.sub.setText("↑ " + SysStats.speed(s.txBps) + (netType.isEmpty() ? "" : "  •  " + netType));
+        } else {
+            net.value.setText("—");
+            net.sub.setText(netType);
+        }
     }
 
     private void cleanNow() {
         if (cleaning) return;
         cleaning = true;
         tvClean.setText("Membersihkan…");
-        handler.removeCallbacks(autoCollapse);
+        handler.removeCallbacks(autoHide);
         final Context app = getApplicationContext();
         new Thread(new Runnable() {
             @Override public void run() {
@@ -421,7 +584,7 @@ public class GameService extends Service {
                         tvClean.setText("Bersihkan");
                         flashToast(String.format(Locale.US, "✓ RAM +%d MB  •  %d aplikasi dihentikan",
                                 r.freedMb, r.requested));
-                        scheduleAutoCollapse();
+                        if (expanded) scheduleAutoHide(AUTO_HIDE_MS);
                     }
                 });
             }
@@ -436,28 +599,30 @@ public class GameService extends Service {
         handler.postDelayed(hideToast, 4500);
     }
 
+    /** Bagian yang ringan dan dibaca di thread utama: baterai, suhu, RAM, jenis jaringan. */
     private void refresh() {
-        if (root == null) return;
+        if (root == null || !expanded) return;
         SysInfo.Ram r = SysInfo.ram(this);
         SysInfo.Batt b = SysInfo.battery(this);
+        netType = SysStats.networkType(this);
 
-        int ramColor = SysInfo.color(this, r.usedPct >= 88 ? R.color.danger
-                : (r.usedPct >= 75 ? R.color.warn : R.color.ok));
-        ring.setValue(r.usedPct, ramColor);
+        battery.setLevel(b.level, b.charging);
+        tvBatt.setText(String.format(Locale.US, "%d%%", b.level));
 
-        tvPill.setText(String.format(Locale.US, "%d%%  %.0f°", r.usedPct, b.tempC));
-        tvRam.setText(String.format(Locale.US, "%d / %d MB", r.usedMb, r.totalMb));
+        Metric ram = metrics[M_RAM];
+        ram.value.setText(r.usedPct + "%");
+        ram.spark.push(r.usedPct);
+        ram.sub.setText(String.format(Locale.US, "%d / %d MB", r.usedMb, r.totalMb));
+
         tvTemp.setText(String.format(Locale.US, "%.1f°C", b.tempC));
         tvTemp.setTextColor(SysInfo.color(this, b.tempC >= 43f ? R.color.danger
                 : (b.tempC >= 40f ? R.color.warn : R.color.text)));
-        tvBatt.setText(String.format(Locale.US, "%d%%%s", b.level, b.charging ? " ⚡" : ""));
-        tvHint.setText(b.tempC >= 43f ? "Perangkat panas, turunkan grafis sebentar"
+        tvHint.setText(b.tempC >= 43f ? "Panas, turunkan grafis sebentar"
                 : (b.tempC >= 40f ? "Mulai hangat, pantau terus" : "Performa stabil"));
 
         // Jaga posisi tetap di dalam layar jika layar diputar.
-        int ox = lp.x;
         int oy = lp.y;
-        clampToScreen();
-        if (ox != lp.x || oy != lp.y) applyLayout();
+        clampY();
+        if (oy != lp.y) applyLayout();
     }
 }

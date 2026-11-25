@@ -5,6 +5,7 @@
     <!-- Jendela mengambang di atas game -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Menghentikan proses aplikasi latar belakang -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!-- Mode Jangan Ganggu selama bermain -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />

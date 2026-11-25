@@ -92,6 +92,7 @@ app/src/main/java/com/gameboost/app/
   GameService.java        layanan foreground, jendela mengambang, penjaga tutup-ulang 20 detik
   GameNotifService.java   penghapus notifikasi selama mode game
   GameBooster.java        tutup/bekukan aplikasi, mode performa, Jangan Ganggu, root opsional
+  SparkView/BatteryView/SysStats.java  grafik panel (CPU, GPU, internet) dan ikon baterai
   SettingsActivity.java   halaman Pengaturan (izin & saklar)
   GuideActivity.java      panduan langkah demi langkah (Shizuku, root, cara pakai)
   ShizukuHelper.java      status, izin, dan perintah shell lewat Shizuku

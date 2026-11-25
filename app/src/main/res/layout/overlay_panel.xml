@@ -1,57 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Jendela mengambang: "card" (lengkap) dan "pill" (kecil). Hanya satu yang tampil. -->
+<!-- Panel mengambang: gagang tipis di tepi layar; geser ke dalam, panel "card" meluncur keluar. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <!-- Bentuk kecil: pil mungil -->
-    <LinearLayout
-        android:id="@+id/pill"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_overlay_pill"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="8dp"
-        android:visibility="gone">
+    <!-- Gagang (area sentuh 26dp x 96dp, garis terlihat 5dp x 60dp) -->
+    <FrameLayout
+        android:id="@+id/handle"
+        android:layout_width="26dp"
+        android:layout_height="96dp">
 
-        <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_bolt"
-            android:tint="@color/ok" />
+        <View
+            android:layout_width="5dp"
+            android:layout_height="60dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_overlay_handle" />
+    </FrameLayout>
 
-        <TextView
-            android:id="@+id/tvPill"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:fontFamily="sans-serif-medium"
-            android:text="0%  0°"
-            android:textColor="@color/text"
-            android:textSize="14sp" />
-    </LinearLayout>
-
-    <!-- Bentuk lengkap: kartu -->
     <LinearLayout
         android:id="@+id/card"
-        android:layout_width="252dp"
+        android:layout_width="300dp"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_overlay_card"
         android:orientation="vertical"
-        android:padding="14dp">
+        android:padding="12dp"
+        android:visibility="gone">
 
-        <View
-            android:layout_width="36dp"
-            android:layout_height="5dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="10dp"
-            android:background="@drawable/bg_grabber" />
-
+        <!-- Judul + ikon baterai -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -75,6 +50,22 @@
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
 
+            <com.gameboost.app.BatteryView
+                android:id="@+id/battery"
+                android:layout_width="28dp"
+                android:layout_height="14dp" />
+
+            <TextView
+                android:id="@+id/tvBatt"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="--"
+                android:textColor="@color/text"
+                android:textSize="12sp" />
+
             <FrameLayout
                 android:id="@+id/btnCollapse"
                 android:layout_width="28dp"
@@ -83,115 +74,72 @@
                 android:clickable="true">
 
                 <ImageView
+                    android:id="@+id/icCollapse"
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:layout_gravity="center"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_minus"
+                    android:src="@drawable/ic_chevron_right"
                     android:tint="#CCFFFFFF" />
             </FrameLayout>
         </LinearLayout>
 
+        <!-- Grafik 2 x 2 (CPU, GPU / RAM, Internet) -->
+        <LinearLayout
+            android:id="@+id/gridRow1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="-3dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="-3dp"
+            android:orientation="horizontal" />
+
+        <LinearLayout
+            android:id="@+id/gridRow2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="-3dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="-3dp"
+            android:orientation="horizontal" />
+
+        <!-- Suhu + saran singkat -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <com.gameboost.app.RingView
-                android:id="@+id/ring"
-                android:layout_width="80dp"
-                android:layout_height="80dp" />
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_thermo"
+                android:tint="@color/warn" />
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/tvTemp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="--"
+                android:textColor="@color/text"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvHint"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
+                android:layout_marginStart="10dp"
                 android:layout_weight="1"
-                android:orientation="vertical">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="15dp"
-                        android:layout_height="15dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_memory"
-                        android:tint="@color/accent" />
-
-                    <TextView
-                        android:id="@+id/tvRam"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="0 / 0 MB"
-                        android:textColor="@color/text"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="15dp"
-                        android:layout_height="15dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_thermo"
-                        android:tint="@color/warn" />
-
-                    <TextView
-                        android:id="@+id/tvTemp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="--"
-                        android:textColor="@color/text"
-                        android:textSize="13sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="15dp"
-                        android:layout_height="15dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_battery"
-                        android:tint="@color/ok" />
-
-                    <TextView
-                        android:id="@+id/tvBatt"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="--"
-                        android:textColor="@color/text"
-                        android:textSize="13sp" />
-                </LinearLayout>
-            </LinearLayout>
+                android:ellipsize="end"
+                android:gravity="end"
+                android:singleLine="true"
+                android:text="Performa stabil"
+                android:textColor="@color/muted"
+                android:textSize="11sp" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Performa stabil"
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/tvToast"
@@ -205,13 +153,13 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:id="@+id/btnClean"
                 android:layout_width="0dp"
-                android:layout_height="40dp"
+                android:layout_height="38dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_btn_tint_blue"
                 android:clickable="true"
@@ -239,7 +187,7 @@
             <LinearLayout
                 android:id="@+id/btnStop"
                 android:layout_width="0dp"
-                android:layout_height="40dp"
+                android:layout_height="38dp"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_btn_tint_red"
