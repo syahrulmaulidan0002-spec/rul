@@ -31,8 +31,8 @@ dinyalakan lewat root) tanpa perlu root penuh. Hasilnya:
   maksimal, dan penghemat daya dimatikan selama bermain. Setelan semula dikembalikan.
   Pelindung suhu HP **tidak** disentuh.
 
-Panduan langkah demi langkah ada di aplikasi (muncul saat pertama dibuka, atau lewat
-**Panduan Shizuku & root** di bagian Izin). Ringkasnya:
+Panduan langkah demi langkah ada di aplikasi. Ketuk kartu **Shizuku** di beranda
+(atau **Panduan Shizuku & root** di Pengaturan); panduan tidak muncul otomatis. Ringkasnya:
 
 - **Belum root**: pasang Shizuku → aktifkan Opsi pengembang → nyalakan Debugging nirkabel →
   Start di Shizuku (Pairing) → izinkan GameBoost. Setelah HP restart, ulangi bagian Start saja.
@@ -92,6 +92,7 @@ app/src/main/java/com/gameboost/app/
   GameService.java        layanan foreground, jendela mengambang, penjaga tutup-ulang 20 detik
   GameNotifService.java   penghapus notifikasi selama mode game
   GameBooster.java        tutup/bekukan aplikasi, mode performa, Jangan Ganggu, root opsional
+  SettingsActivity.java   halaman Pengaturan (izin & saklar)
   GuideActivity.java      panduan langkah demi langkah (Shizuku, root, cara pakai)
   ShizukuHelper.java      status, izin, dan perintah shell lewat Shizuku
   ShellService.java       layanan shell yang dijalankan Shizuku

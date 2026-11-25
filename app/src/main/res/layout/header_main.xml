@@ -4,20 +4,44 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:paddingStart="16dp"
-    android:paddingTop="24dp"
+    android:paddingTop="20dp"
     android:paddingEnd="16dp"
     android:paddingBottom="4dp">
 
-    <!-- Judul besar ala iOS -->
-    <TextView
-        android:layout_width="wrap_content"
+    <!-- Judul + tombol pengaturan -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fontFamily="sans-serif-medium"
-        android:paddingStart="4dp"
-        android:text="GameBoost"
-        android:textColor="@color/text"
-        android:textSize="34sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif-medium"
+            android:paddingStart="4dp"
+            android:text="GameBoost"
+            android:textColor="@color/text"
+            android:textSize="34sp"
+            android:textStyle="bold" />
+
+        <FrameLayout
+            android:id="@+id/btnSettings"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_circle_btn"
+            android:clickable="true">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="Pengaturan"
+                android:src="@drawable/ic_tune"
+                android:tint="@color/text" />
+        </FrameLayout>
+    </LinearLayout>
 
     <TextView
         android:layout_width="wrap_content"
@@ -64,20 +88,139 @@
             android:background="@drawable/bg_creator_line" />
     </LinearLayout>
 
-    <!-- Status: cincin RAM + suhu + baterai -->
+    <!-- Kartu game terpilih -->
     <LinearLayout
         style="@style/Card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="22dp"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/heroIcon"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/bg_app_icon"
+                android:clipToOutline="true"
+                android:contentDescription="@null" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/heroName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="Pilih game"
+                    android:textColor="@color/text"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/heroSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="middle"
+                    android:singleLine="true"
+                    android:text="Ketuk game di bawah"
+                    android:textColor="@color/muted"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/heroStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:text=""
+            android:textColor="@color/ok"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Game saya -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:layout_marginBottom="7dp"
+        android:orientation="horizontal">
+
+        <TextView
+            style="@style/Section"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="GAME SAYA" />
+
+        <TextView
+            android:id="@+id/tvMineCount"
+            style="@style/Section"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingEnd="16dp"
+            android:text="" />
+    </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="-16dp"
+        android:layout_marginEnd="-16dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:paddingStart="16dp"
+        android:paddingEnd="6dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/gamesRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <TextView
+        android:id="@+id/tvNoGames"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:text="Belum ada game terdeteksi. Pilih dari daftar aplikasi di bawah."
+        android:textColor="@color/muted"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <!-- Kondisi HP: cincin RAM + suhu + baterai -->
+    <LinearLayout
+        style="@style/Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:padding="16dp">
 
         <com.gameboost.app.RingView
             android:id="@+id/ringRam"
-            android:layout_width="96dp"
-            android:layout_height="96dp" />
+            android:layout_width="88dp"
+            android:layout_height="88dp" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -159,12 +302,16 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Rekomendasi grafis -->
+    <!-- Shizuku: ketuk untuk membuka panduan langkah demi langkah -->
     <LinearLayout
+        android:id="@+id/rowShizuku"
         style="@style/Card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
+        android:clickable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
         android:padding="14dp">
 
@@ -172,14 +319,14 @@
             android:layout_width="30dp"
             android:layout_height="30dp"
             android:background="@drawable/bg_tile"
-            android:backgroundTint="#AF52DE">
+            android:backgroundTint="#64D2FF">
 
             <ImageView
                 android:layout_width="18dp"
                 android:layout_height="18dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_tune"
+                android:src="@drawable/ic_bolt"
                 android:tint="@color/text" />
         </FrameLayout>
 
@@ -194,20 +341,34 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-medium"
-                android:text="Rekomendasi setelan grafis"
+                android:text="Shizuku"
                 android:textColor="@color/text"
                 android:textSize="16sp" />
 
             <TextView
-                android:id="@+id/tvGraphics"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:lineSpacingExtra="3dp"
-                android:text="-"
+                android:layout_marginTop="1dp"
+                android:text="Ketuk untuk melihat panduan langkah demi langkah"
                 android:textColor="@color/muted"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvShizuku"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="--"
+            android:textColor="@color/muted"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="2dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_chevron_right"
+            android:tint="#48484A" />
     </LinearLayout>
 
     <!-- Pulihkan aplikasi yang masih dibekukan -->
@@ -268,60 +429,58 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Izin (baris dibuat dari kode) -->
-    <TextView
-        style="@style/Section"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:layout_marginBottom="7dp"
-        android:text="IZIN" />
-
+    <!-- Rekomendasi grafis -->
     <LinearLayout
-        android:id="@+id/permList"
         style="@style/Card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical" />
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:padding="14dp">
 
-    <TextView
-        android:id="@+id/tvVendorHint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="7dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:text=""
-        android:textColor="@color/muted"
-        android:textSize="12sp" />
+        <FrameLayout
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_tile"
+            android:backgroundTint="#AF52DE">
 
-    <!-- Pengaturan mode game (baris dibuat dari kode) -->
-    <TextView
-        style="@style/Section"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:layout_marginBottom="7dp"
-        android:text="MODE GAME" />
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_tune"
+                android:tint="@color/text" />
+        </FrameLayout>
 
-    <LinearLayout
-        android:id="@+id/switchList"
-        style="@style/Card"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="7dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:text="Jendela kecil bersifat eksperimental dan hanya jalan di HP yang mendukung mode freeform."
-        android:textColor="@color/muted"
-        android:textSize="12sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="Rekomendasi setelan grafis"
+                android:textColor="@color/text"
+                android:textSize="16sp" />
 
-    <!-- Daftar game -->
+            <TextView
+                android:id="@+id/tvGraphics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:lineSpacingExtra="3dp"
+                android:text="-"
+                android:textColor="@color/muted"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Aplikasi lain (daftar di bawah) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -334,7 +493,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="PILIH GAME" />
+            android:text="APLIKASI LAIN (KETUK UNTUK MENAMBAH KE GAME SAYA)" />
 
         <TextView
             android:id="@+id/tvCount"

@@ -1,44 +1,41 @@
 package com.gameboost.app;
 
-import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityOptions;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.content.res.ColorStateList;
 import android.graphics.Insets;
 import android.graphics.LinearGradient;
 import android.graphics.Rect;
 import android.graphics.Shader;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
-import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.AdapterView;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
+/** Beranda game: game terpilih, deretan "Game saya", kondisi HP, dan tombol mulai mode game. */
 public class MainActivity extends Activity {
 
     static final String EXTRA_GAME = "game";
@@ -49,46 +46,37 @@ public class MainActivity extends Activity {
     static final String EXTRA_NOTIF = "notif";
     static final String EXTRA_FREEZE = "freeze";
 
-    private static final int REQ_NOTIF = 21;
+    private static final String KEY_MY_GAMES = "my_games";
 
     private static final String[] GAME_HINTS = {
             "legends", "freefire", "pubg", "codm", "callofduty", "genshin", "supercell",
             "roblox", "minecraft", "garena", "tencent", "mobilelegends", "honkai", "efootball"
     };
 
-    /** Satu baris izin pada bagian IZIN. */
-    private interface Check { boolean ok(); }
-
-    private static final class Perm {
-        final Check check;          // null = tidak bisa dicek (hanya tombol "Buka")
-        final Runnable action;
-        TextView status;
-
-        Perm(Check check, Runnable action) {
-            this.check = check;
-            this.action = action;
-        }
-    }
-
     private SharedPreferences prefs;
-    private final List<GameItem> items = new ArrayList<>();
-    private final List<Perm> perms = new ArrayList<>();
+    private final List<GameItem> all = new ArrayList<>();      // semua aplikasi yang bisa dibuka
+    private final List<GameItem> mine = new ArrayList<>();     // tampil di "Game saya"
+    private final List<GameItem> others = new ArrayList<>();   // daftar aplikasi lain
     private GameAdapter adapter;
     private String selectedPkg;
+    private String heroPkg = "";
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private ListView list;
     private RingView ringRam;
-    private TextView tvRamDetail, tvTemp, tvBatt, tvGraphics, tvCount, tvSelected;
-    private Switch swKill, swNotif, swDnd, swOverlay, swFreeform, swFreeze, swPerf;
+    private ImageView heroIcon;
+    private LinearLayout gamesRow;
     private View cardRestore;
-    private TextView tvRestore;
+    private TextView tvRamDetail, tvTemp, tvBatt, tvGraphics, tvCount, tvMineCount, tvSelected;
+    private TextView heroName, heroSub, heroStatus, tvNoGames, tvShizuku, tvRestore;
     private Button btnMain;
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             updateStatus();
             updateBottom();
+            updateHeroStatus();
+            updateShizuku();
             updateRestore();
             handler.postDelayed(this, 2000);
         }
@@ -98,7 +86,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        prefs = getSharedPreferences("gameboost", MODE_PRIVATE);
+        prefs = Prefs.get(this);
         selectedPkg = prefs.getString("game_pkg", null);
 
         // Android 15 menggambar aplikasi sampai ke bawah status bar: beri ruang untuk bar sistem.
@@ -124,32 +112,37 @@ public class MainActivity extends Activity {
         tvBatt = header.findViewById(R.id.tvBatt);
         tvGraphics = header.findViewById(R.id.tvGraphics);
         tvCount = header.findViewById(R.id.tvCount);
-        tvGraphics.setText(SysInfo.advice(this));
-        setupCreator(header);
+        tvMineCount = header.findViewById(R.id.tvMineCount);
+        heroIcon = header.findViewById(R.id.heroIcon);
+        heroName = header.findViewById(R.id.heroName);
+        heroSub = header.findViewById(R.id.heroSub);
+        heroStatus = header.findViewById(R.id.heroStatus);
+        gamesRow = header.findViewById(R.id.gamesRow);
+        tvNoGames = header.findViewById(R.id.tvNoGames);
+        tvShizuku = header.findViewById(R.id.tvShizuku);
         cardRestore = header.findViewById(R.id.cardRestore);
         tvRestore = header.findViewById(R.id.tvRestore);
-        header.findViewById(R.id.rowRestore).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { restoreAll(); }
-        });
-        ((TextView) header.findViewById(R.id.tvVendorHint)).setText(
-                VendorHelper.hint() + "\n\nAndroid 13+: jika \"Akses notifikasi\" abu-abu, buka Info Aplikasi "
-                        + "GameBoost, ketuk titik tiga di kanan atas, lalu pilih \"Izinkan setelan terbatas\".");
 
-        buildPermRows((LinearLayout) header.findViewById(R.id.permList));
-        buildSwitchRows((LinearLayout) header.findViewById(R.id.switchList));
+        tvGraphics.setText(SysInfo.advice(this));
+        setupCreator(header);
 
-        adapter = new GameAdapter(this, items);
-        adapter.selectedPkg = selectedPkg;
+        header.findViewById(R.id.btnSettings).setOnClickListener(v -> openSettings());
+        heroStatus.setOnClickListener(v -> openSettings());
+        header.findViewById(R.id.rowShizuku).setOnClickListener(v -> openGuide());
+        header.findViewById(R.id.rowRestore).setOnClickListener(v -> restoreAll());
+
+        adapter = new GameAdapter(this, others);
         list.setAdapter(adapter);
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override public void onItemClick(AdapterView<?> parent, View v, int pos, long id) {
                 Object o = parent.getItemAtPosition(pos);
                 if (o instanceof GameItem) {
-                    selectedPkg = ((GameItem) o).pkg;
-                    prefs.edit().putString("game_pkg", selectedPkg).apply();
-                    adapter.selectedPkg = selectedPkg;
-                    adapter.notifyDataSetChanged();
-                    updateBottom();
+                    // Aplikasi dari daftar ini ditambahkan ke "Game saya" lalu dipilih.
+                    String pkg = ((GameItem) o).pkg;
+                    Set<String> my = myGames();
+                    my.add(pkg);
+                    prefs.edit().putStringSet(KEY_MY_GAMES, my).apply();
+                    select(pkg);
                 }
             }
         });
@@ -166,18 +159,13 @@ public class MainActivity extends Activity {
         });
 
         loadApps();
-
-        // Pertama kali dibuka: tampilkan panduan Shizuku/root.
-        if (!prefs.getBoolean("guide_seen", false)) {
-            prefs.edit().putBoolean("guide_seen", true).apply();
-            openGuide();
-        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        updatePermUi();
+        updateHeroStatus();
+        updateShizuku();
         handler.post(ticker);
     }
 
@@ -187,123 +175,11 @@ public class MainActivity extends Activity {
         super.onPause();
     }
 
-    @Override
-    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
-        super.onRequestPermissionsResult(code, perms, results);
-        updatePermUi();
-    }
-
-    // ---------------------------------------------------------------- baris izin
-
-    private void buildPermRows(LinearLayout parent) {
-        addPerm(parent, "Jendela mengambang", R.drawable.ic_window, 0xFF0A84FF,
-                this::canOverlay, this::openOverlaySettings);
-
-        addPerm(parent, "Akses Jangan Ganggu", R.drawable.ic_moon, 0xFF5E5CE6,
-                () -> GameBooster.hasDndAccess(this), () -> {
-                    if (Build.VERSION.SDK_INT < 23) {
-                        toast("Jangan Ganggu otomatis tidak didukung di Android ini");
-                    } else {
-                        startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
-                    }
-                });
-
-        addPerm(parent, "Akses notifikasi (hapus otomatis)", R.drawable.ic_bell, 0xFFFF453A,
-                () -> GameNotifService.isEnabled(this), () -> {
-                    try {
-                        startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
-                    } catch (Exception e) {
-                        toast("Buka Pengaturan > Akses notifikasi secara manual");
-                    }
-                });
-
-        addPerm(parent, "Notifikasi mode game", R.drawable.ic_bolt, 0xFF30D158,
-                this::hasNotifPerm, () -> {
-                    if (Build.VERSION.SDK_INT >= 33) {
-                        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
-                    }
-                });
-
-        addPerm(parent, "Tanpa batasan baterai", R.drawable.ic_battery, 0xFF34C759,
-                this::ignoresBatteryOpt, this::requestIgnoreBattery);
-
-        addPerm(parent, "Akses Shizuku (bekukan & performa)", R.drawable.ic_bolt, 0xFF64D2FF,
-                ShizukuHelper::granted, this::openGuide);
-
-        addPerm(parent, "Panduan Shizuku & root", R.drawable.ic_tune, 0xFFAF52DE,
-                null, this::openGuide);
-
-        addPerm(parent, VendorHelper.title(), R.drawable.ic_tune, 0xFFFF9F0A,
-                null, () -> VendorHelper.open(this));
-    }
-
-    private void addPerm(LinearLayout parent, String title, int icon, int tint, Check check, Runnable action) {
-        View row = getLayoutInflater().inflate(R.layout.row_perm, parent, false);
-        row.findViewById(R.id.permDivider).setVisibility(parent.getChildCount() == 0 ? View.GONE : View.VISIBLE);
-        row.findViewById(R.id.permTile).setBackgroundTintList(ColorStateList.valueOf(tint));
-        ((ImageView) row.findViewById(R.id.permIcon)).setImageResource(icon);
-        ((TextView) row.findViewById(R.id.permTitle)).setText(title);
-
-        final Perm p = new Perm(check, action);
-        p.status = row.findViewById(R.id.permStatus);
-        row.findViewById(R.id.permRow).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (p.check == null || !p.check.ok()) p.action.run();
-            }
-        });
-        perms.add(p);
-        parent.addView(row);
-    }
-
-    private void updatePermUi() {
-        for (Perm p : perms) {
-            if (p.check == null) {
-                p.status.setText("Buka");
-                p.status.setTextColor(SysInfo.color(this, R.color.accent));
-            } else if (p.check.ok()) {
-                p.status.setText("Aktif");
-                p.status.setTextColor(SysInfo.color(this, R.color.ok));
-            } else {
-                p.status.setText("Atur");
-                p.status.setTextColor(SysInfo.color(this, R.color.accent));
-            }
-        }
-    }
-
-    // ---------------------------------------------------------------- baris pengaturan
-
-    private void buildSwitchRows(LinearLayout parent) {
-        swKill = addSwitch(parent, "Tutup semua aplikasi latar belakang", R.drawable.ic_sparkle, 0xFFFF9F0A, "kill", true);
-        swNotif = addSwitch(parent, "Hapus semua notifikasi yang masuk", R.drawable.ic_bell, 0xFFFF453A, "notif", true);
-        swDnd = addSwitch(parent, "Hening total (Jangan Ganggu)", R.drawable.ic_moon, 0xFF5E5CE6, "dnd", true);
-        swOverlay = addSwitch(parent, "Jendela mengambang saat bermain", R.drawable.ic_window, 0xFF0A84FF, "overlay", true);
-        swFreeze = addSwitch(parent, "Bekukan, bukan sekadar tutup (Shizuku)", R.drawable.ic_sparkle, 0xFF64D2FF, "freeze", true);
-        swPerf = addSwitch(parent, "Mode performa: refresh rate maks (Shizuku)", R.drawable.ic_bolt, 0xFF30D158, "perf", true);
-        swFreeform = addSwitch(parent, "Buka game di jendela kecil", R.drawable.ic_gamepad, 0xFF32ADE6, "freeform", false);
-    }
-
-    private Switch addSwitch(LinearLayout parent, String title, int icon, int tint, final String key, boolean def) {
-        View row = getLayoutInflater().inflate(R.layout.row_switch, parent, false);
-        row.findViewById(R.id.swDivider).setVisibility(parent.getChildCount() == 0 ? View.GONE : View.VISIBLE);
-        row.findViewById(R.id.swTile).setBackgroundTintList(ColorStateList.valueOf(tint));
-        ((ImageView) row.findViewById(R.id.swIcon)).setImageResource(icon);
-        ((TextView) row.findViewById(R.id.swTitle)).setText(title);
-
-        final Switch sw = row.findViewById(R.id.swSwitch);
-        sw.setChecked(prefs.getBoolean(key, def));
-        sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override public void onCheckedChanged(CompoundButton b, boolean checked) {
-                prefs.edit().putBoolean(key, checked).apply();
-            }
-        });
-        row.findViewById(R.id.swRow).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { sw.toggle(); }
-        });
-        parent.addView(row);
-        return sw;
-    }
-
     // ---------------------------------------------------------------- daftar aplikasi
+
+    private Set<String> myGames() {
+        return new HashSet<>(prefs.getStringSet(KEY_MY_GAMES, Collections.<String>emptySet()));
+    }
 
     private void loadApps() {
         new Thread(new Runnable() {
@@ -311,11 +187,9 @@ public class MainActivity extends Activity {
                 final List<GameItem> found = queryApps();
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
-                        items.clear();
-                        items.addAll(found);
-                        adapter.notifyDataSetChanged();
-                        tvCount.setText(items.size() + " aplikasi");
-                        updateBottom();
+                        all.clear();
+                        all.addAll(found);
+                        rebuild();
                     }
                 });
             }
@@ -353,9 +227,68 @@ public class MainActivity extends Activity {
         return false;
     }
 
+    /** Bagi aplikasi menjadi "Game saya" dan "Aplikasi lain", lalu segarkan tampilan. */
+    private void rebuild() {
+        Set<String> my = myGames();
+        mine.clear();
+        others.clear();
+        for (GameItem g : all) {
+            if (g.isGame || my.contains(g.pkg) || g.pkg.equals(selectedPkg)) mine.add(g);
+            else others.add(g);
+        }
+        adapter.selectedPkg = selectedPkg;
+        adapter.notifyDataSetChanged();
+        tvCount.setText(others.size() + " aplikasi");
+        tvMineCount.setText(mine.size() + " game");
+        fillCarousel();
+        updateHero();
+        updateBottom();
+    }
+
+    private void fillCarousel() {
+        gamesRow.removeAllViews();
+        for (final GameItem g : mine) {
+            View v = getLayoutInflater().inflate(R.layout.item_game_card, gamesRow, false);
+            ((ImageView) v.findViewById(R.id.cardIcon)).setImageDrawable(g.icon);
+            ((TextView) v.findViewById(R.id.cardName)).setText(g.label);
+            v.findViewById(R.id.cardBox).setBackgroundResource(g.pkg.equals(selectedPkg)
+                    ? R.drawable.bg_game_card_sel : R.drawable.bg_game_card);
+            v.setOnClickListener(x -> select(g.pkg));
+            v.setOnLongClickListener(x -> {
+                removeFromMine(g);
+                return true;
+            });
+            gamesRow.addView(v);
+        }
+        tvNoGames.setVisibility(mine.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    private void select(String pkg) {
+        selectedPkg = pkg;
+        prefs.edit().putString("game_pkg", pkg).apply();
+        rebuild();
+    }
+
+    private void removeFromMine(GameItem g) {
+        if (g.isGame) {
+            toast("Game ini terdeteksi otomatis, jadi tidak bisa dihapus dari daftar");
+            return;
+        }
+        Set<String> my = myGames();
+        my.remove(g.pkg);
+        SharedPreferences.Editor ed = prefs.edit().putStringSet(KEY_MY_GAMES, my);
+        if (g.pkg.equals(selectedPkg)) {
+            selectedPkg = null;
+            ed.remove("game_pkg");
+        }
+        ed.apply();
+        rebuild();
+        toast("Dihapus dari Game saya");
+    }
+
     private GameItem selectedItem() {
         if (selectedPkg == null) return null;
-        for (GameItem g : items) {
+        for (GameItem g : all) {
             if (g.pkg.equals(selectedPkg)) return g;
         }
         return null;
@@ -366,39 +299,27 @@ public class MainActivity extends Activity {
     private void startMode() {
         final GameItem game = selectedItem();
         if (game == null) {
-            toast("Pilih game dulu dari daftar");
+            toast("Pilih game dulu dari Game saya");
             return;
         }
-        final boolean kill = swKill.isChecked();
-        final boolean notif = swNotif.isChecked();
-        final boolean dnd = swDnd.isChecked();
-        final boolean overlay = swOverlay.isChecked();
-        final boolean freeze = swFreeze.isChecked();
-        final boolean perf = swPerf.isChecked();
+        final boolean kill = Prefs.flag(this, "kill");
+        final boolean notif = Prefs.flag(this, "notif");
+        final boolean dnd = Prefs.flag(this, "dnd");
+        final boolean overlay = Prefs.flag(this, "overlay");
+        final boolean freeze = Prefs.flag(this, "freeze");
+        final boolean perf = Prefs.flag(this, "perf");
 
-        if (overlay && !canOverlay()) {
-            toast("Izinkan \"Tampil di atas aplikasi lain\" lalu tekan Mulai lagi");
-            openOverlaySettings();
-            return;
-        }
-        if (dnd && Build.VERSION.SDK_INT >= 23 && !GameBooster.hasDndAccess(this)) {
-            toast("Beri akses Jangan Ganggu ke GameBoost lalu tekan Mulai lagi");
-            startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
-            return;
-        }
-        if (notif && !GameNotifService.isEnabled(this)) {
-            toast("Nyalakan \"Akses notifikasi\" untuk GameBoost lalu tekan Mulai lagi");
-            try {
-                startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
-            } catch (Exception ignored) {
-            }
+        String missing = missingPermissions();
+        if (missing != null) {
+            toast("Atur dulu: " + missing);
+            openSettings();
             return;
         }
 
         final boolean shizuku = ShizukuHelper.ready();
         final boolean freezeOn = freeze && shizuku;
         if ((freeze || perf) && !shizuku) {
-            toast("Shizuku belum aktif, memakai cara biasa. Buka \"Panduan Shizuku & root\" di bagian Izin.");
+            toast("Shizuku belum aktif, memakai cara biasa. Ketuk kartu Shizuku untuk panduannya.");
         }
 
         btnMain.setEnabled(false);
@@ -441,6 +362,23 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    /** Daftar izin yang masih kurang untuk setelan sekarang, atau null jika sudah lengkap. */
+    private String missingPermissions() {
+        List<String> m = new ArrayList<>();
+        if (Prefs.flag(this, "overlay") && !PermHelper.canOverlay(this)) m.add("Jendela mengambang");
+        if (Prefs.flag(this, "dnd") && Build.VERSION.SDK_INT >= 23 && !GameBooster.hasDndAccess(this)) {
+            m.add("Jangan Ganggu");
+        }
+        if (Prefs.flag(this, "notif") && !GameNotifService.isEnabled(this)) m.add("Akses notifikasi");
+        if (m.isEmpty()) return null;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < m.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(m.get(i));
+        }
+        return sb.toString();
+    }
+
     private void launchGame(String pkg) {
         Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
         if (i == null) {
@@ -449,7 +387,7 @@ public class MainActivity extends Activity {
         }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         Bundle opts = null;
-        if (swFreeform.isChecked() && Build.VERSION.SDK_INT >= 24) {
+        if (Prefs.flag(this, "freeform") && Build.VERSION.SDK_INT >= 24) {
             // Eksperimental: hanya berjalan di HP yang mendukung jendela freeform.
             DisplayMetrics dm = getResources().getDisplayMetrics();
             int w = dm.widthPixels;
@@ -464,7 +402,86 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ---------------------------------------------------------------- UI
+    // ---------------------------------------------------------------- tampilan
+
+    /** Nama pembuat: gradasi warna dan muncul perlahan seperti tanda tangan. */
+    private void setupCreator(View header) {
+        final TextView name = header.findViewById(R.id.tvCreatorName);
+        View wrap = header.findViewById(R.id.creatorWrap);
+        name.post(new Runnable() {
+            @Override public void run() {
+                float w = Math.max(1f, name.getPaint().measureText(name.getText().toString()));
+                name.getPaint().setShader(new LinearGradient(0, 0, w, 0,
+                        new int[]{0xFF64D2FF, 0xFF0A84FF, 0xFFBF5AF2, 0xFFFF375F}, null,
+                        Shader.TileMode.CLAMP));
+                name.invalidate();
+            }
+        });
+        float d = getResources().getDisplayMetrics().density;
+        wrap.setAlpha(0f);
+        wrap.setTranslationY(8f * d);
+        wrap.animate().alpha(1f).translationY(0f).setStartDelay(250).setDuration(850).start();
+    }
+
+    /** Kartu game terpilih di bagian atas beranda. */
+    private void updateHero() {
+        GameItem g = selectedItem();
+        String pkg = g != null ? g.pkg : "";
+        if (!pkg.equals(heroPkg)) {
+            heroPkg = pkg;
+            if (g != null) {
+                heroIcon.setPadding(0, 0, 0, 0);
+                heroIcon.clearColorFilter();
+                heroIcon.setImageDrawable(g.icon);
+            } else {
+                int pad = Math.round(16 * getResources().getDisplayMetrics().density);
+                heroIcon.setPadding(pad, pad, pad, pad);
+                heroIcon.setColorFilter(0xFF8E8E93);
+                heroIcon.setImageResource(R.drawable.ic_gamepad);
+            }
+        }
+        heroName.setText(g != null ? g.label : "Pilih game");
+        heroSub.setText(g != null ? g.pkg : "Ketuk game di bawah");
+        updateHeroStatus();
+    }
+
+    private void updateHeroStatus() {
+        if (heroStatus == null) return;
+        if (GameService.running) {
+            heroStatus.setText("● Mode game sedang aktif");
+            heroStatus.setTextColor(SysInfo.color(this, R.color.ok));
+            return;
+        }
+        String missing = missingPermissions();
+        if (missing != null) {
+            heroStatus.setText("Perlu diatur: " + missing + "  •  ketuk untuk membuka Pengaturan");
+            heroStatus.setTextColor(SysInfo.color(this, R.color.warn));
+        } else {
+            heroStatus.setText("✓ Siap dimainkan");
+            heroStatus.setTextColor(SysInfo.color(this, R.color.ok));
+        }
+    }
+
+    private void updateShizuku() {
+        if (tvShizuku == null) return;
+        String text;
+        int color;
+        if (ShizukuHelper.granted()) {
+            text = ShizukuHelper.isRoot() ? "Aktif (root)" : "Aktif";
+            color = R.color.ok;
+        } else if (ShizukuHelper.running()) {
+            text = "Perlu izin";
+            color = R.color.warn;
+        } else if (ShizukuHelper.installed(this)) {
+            text = "Belum menyala";
+            color = R.color.warn;
+        } else {
+            text = "Belum terpasang";
+            color = R.color.muted;
+        }
+        tvShizuku.setText(text);
+        tvShizuku.setTextColor(SysInfo.color(this, color));
+    }
 
     private void updateStatus() {
         SysInfo.Ram r = SysInfo.ram(this);
@@ -487,33 +504,11 @@ public class MainActivity extends Activity {
             btnMain.setBackgroundResource(R.drawable.bg_button_stop);
             tvSelected.setText("Mode game aktif" + (g != null ? "  •  " + g.label : ""));
         } else {
-            btnMain.setText("Mulai Mode Game");
+            btnMain.setText(g != null ? "Main " + g.label : "Mulai Mode Game");
             btnMain.setBackgroundResource(R.drawable.bg_button);
-            tvSelected.setText(g != null ? g.label : "Pilih game dari daftar di atas");
+            tvSelected.setText(g != null ? "Semua aplikasi lain akan dihentikan atau dibekukan"
+                    : "Pilih game dari Game saya");
         }
-    }
-
-    /** Nama pembuat: gradasi warna dan muncul perlahan seperti tanda tangan. */
-    private void setupCreator(View header) {
-        final TextView name = header.findViewById(R.id.tvCreatorName);
-        View wrap = header.findViewById(R.id.creatorWrap);
-        name.post(new Runnable() {
-            @Override public void run() {
-                float w = Math.max(1f, name.getPaint().measureText(name.getText().toString()));
-                name.getPaint().setShader(new LinearGradient(0, 0, w, 0,
-                        new int[]{0xFF64D2FF, 0xFF0A84FF, 0xFFBF5AF2, 0xFFFF375F}, null,
-                        Shader.TileMode.CLAMP));
-                name.invalidate();
-            }
-        });
-        float d = getResources().getDisplayMetrics().density;
-        wrap.setAlpha(0f);
-        wrap.setTranslationY(8f * d);
-        wrap.animate().alpha(1f).translationY(0f).setStartDelay(250).setDuration(850).start();
-    }
-
-    private void openGuide() {
-        startActivity(new Intent(this, GuideActivity.class));
     }
 
     private void updateRestore() {
@@ -527,7 +522,7 @@ public class MainActivity extends Activity {
             toast("Nyalakan Shizuku dulu, lalu ketuk lagi");
             return;
         }
-        final android.content.Context app = getApplicationContext();
+        final Context app = getApplicationContext();
         new Thread(new Runnable() {
             @Override public void run() {
                 final int n = GameBooster.restoreSession(app);
@@ -541,37 +536,13 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private boolean canOverlay() {
-        return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this);
+    private void openSettings() {
+        startActivity(new Intent(this, SettingsActivity.class));
     }
 
-    private boolean hasNotifPerm() {
-        return Build.VERSION.SDK_INT < 33
-                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private boolean ignoresBatteryOpt() {
-        if (Build.VERSION.SDK_INT < 23) return true;
-        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-        return pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
-    }
-
-    private void requestIgnoreBattery() {
-        try {
-            startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    Uri.parse("package:" + getPackageName())));
-        } catch (Exception e) {
-            try {
-                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
-    private void openOverlaySettings() {
-        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:" + getPackageName())));
+    /** Halaman panduan langkah demi langkah Shizuku; hanya terbuka saat diketuk. */
+    private void openGuide() {
+        startActivity(new Intent(this, GuideActivity.class));
     }
 
     private void toast(String msg) {
