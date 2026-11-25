@@ -70,6 +70,7 @@ public class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         updatePermUi();
+        GameService.syncWatch(this);
     }
 
     @Override
@@ -101,6 +102,9 @@ public class SettingsActivity extends Activity {
                         toast("Buka Pengaturan > Akses notifikasi secara manual");
                     }
                 });
+
+        addPerm(parent, "Akses penggunaan (aktif otomatis)", R.drawable.ic_sparkle, 0xFFBF5AF2,
+                () -> PermHelper.hasUsageAccess(this), () -> PermHelper.openUsageAccess(this));
 
         addPerm(parent, "Notifikasi mode game", R.drawable.ic_bolt, 0xFF30D158,
                 () -> PermHelper.hasNotifPerm(this), () -> {
@@ -159,6 +163,8 @@ public class SettingsActivity extends Activity {
     // ---------------------------------------------------------------- baris saklar
 
     private void buildSwitchRows(LinearLayout parent) {
+        addSwitch(parent, "Aktif otomatis saat game dibuka", R.drawable.ic_bolt, 0xFFBF5AF2, "auto");
+        addSwitch(parent, "Animasi masuk game", R.drawable.ic_sparkle, 0xFF0A84FF, "anim");
         addSwitch(parent, "Tutup semua aplikasi latar belakang", R.drawable.ic_sparkle, 0xFFFF9F0A, "kill");
         addSwitch(parent, "Hapus semua notifikasi yang masuk", R.drawable.ic_bell, 0xFFFF453A, "notif");
         addSwitch(parent, "Hening total (Jangan Ganggu)", R.drawable.ic_moon, 0xFF5E5CE6, "dnd");
@@ -184,6 +190,7 @@ public class SettingsActivity extends Activity {
         sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override public void onCheckedChanged(CompoundButton b, boolean checked) {
                 prefs.edit().putBoolean(key, checked).apply();
+                if ("auto".equals(key)) GameService.syncWatch(SettingsActivity.this);
             }
         });
         row.findViewById(R.id.swRow).setOnClickListener(new View.OnClickListener() {

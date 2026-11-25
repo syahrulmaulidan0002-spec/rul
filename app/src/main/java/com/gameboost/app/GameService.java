@@ -5,10 +5,13 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
@@ -19,6 +22,9 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.ContextThemeWrapper;
@@ -33,7 +39,11 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -43,17 +53,28 @@ import java.util.Locale;
  */
 public class GameService extends Service {
 
+    /** true selama mode game aktif. */
     public static volatile boolean running = false;
+    /** true selama layanan siaga (aktif otomatis) berjalan. */
+    public static volatile boolean watching = false;
     /** true jika semua notifikasi yang masuk harus dihapus (dibaca oleh GameNotifService). */
     public static volatile boolean blockNotifs = false;
 
     static final String ACTION_STOP = "com.gameboost.app.action.STOP";
+    static final String ACTION_WATCH = "com.gameboost.app.action.WATCH";
+    static final String ACTION_UNWATCH = "com.gameboost.app.action.UNWATCH";
     private static final String CHANNEL = "gameboost_mode";
+    private static final String CHANNEL_WATCH = "gameboost_watch";
+    private static final String CHANNEL_SUMMARY = "gameboost_summary";
     private static final int NOTIF_ID = 7;
+    private static final int NOTIF_SUMMARY_ID = 8;
+    private static final int NOTIF_BREAK_ID = 9;
     private static final int CARD_W_DP = 300;
     private static final long AUTO_HIDE_MS = 12000;
     private static final long FIRST_HIDE_MS = 6000;
     private static final long SAMPLE_MS = 2000;
+    private static final long WATCH_MS = 2000;
+    private static final long AWAY_END_MS = 8000;       // game ditinggalkan selama ini = sesi otomatis selesai
     private static final long KILL_INTERVAL_MS = 20000;
 
     /** Satu kotak grafik di panel. */
@@ -89,9 +110,27 @@ public class GameService extends Service {
     private SysStats stats;
     private volatile boolean sampling = false;
 
+    // Catatan sesi (untuk ringkasan)
+    private long sessionStart = 0;
+    private int startBatt = 0;
+    private float peakTemp = 0f;
+    private int cpuSum, cpuN, gpuSum, gpuN;
+    private int sReq, sFrozen;
+    private long sFreed;
+    private boolean sBlocked;
+
+    // Aktif otomatis
+    private boolean autoStarted = false;
+    private volatile boolean starting = false;
+    private String suppressPkg = null;
+    private String curFg = null;
+    private long lastEventTs = 0;
+    private int awayMs = 0;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable tick = new Runnable() {
         @Override public void run() {
+            trackStats();
             refresh();
             handler.postDelayed(this, 1500);
         }
@@ -124,6 +163,30 @@ public class GameService extends Service {
             if (sampling && h != null) h.postDelayed(this, SAMPLE_MS);
         }
     };
+    private final Runnable breakTask = new Runnable() {
+        @Override public void run() {
+            if (!running) return;
+            int min = Prefs.get(GameService.this).getInt("break_min", 60);
+            String msg = "Sudah " + min + " menit main. Istirahat sebentar dan minum air.";
+            vibrate(250);
+            if (root != null) {
+                openPanel(10000);
+                flashToast(msg, 9000);
+            } else {
+                postSimpleNotification(NOTIF_BREAK_ID, "Waktunya istirahat", msg);
+            }
+            scheduleBreak();
+        }
+    };
+    private final Runnable watchTask = new Runnable() {
+        @Override public void run() {
+            try {
+                watchTick();
+            } catch (Exception ignored) {
+            }
+            if (watching) handler.postDelayed(this, WATCH_MS);
+        }
+    };
 
     // Penjaga: aplikasi latar belakang sering hidup lagi sendiri, jadi ditutup ulang berkala.
     private boolean killLoop = true;
@@ -152,64 +215,131 @@ public class GameService extends Service {
 
     @Override public IBinder onBind(Intent intent) { return null; }
 
+    /** Nyalakan atau matikan layanan siaga sesuai setelan dan izin. Aman dipanggil berulang. */
+    static void syncWatch(Context c) {
+        boolean want = Prefs.flag(c, "auto") && PermHelper.hasUsageAccess(c);
+        try {
+            if (want && !watching) {
+                Intent i = new Intent(c, GameService.class).setAction(ACTION_WATCH);
+                if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i);
+                else c.startService(i);
+            } else if (!want && watching) {
+                c.startService(new Intent(c, GameService.class).setAction(ACTION_UNWATCH));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private boolean watchWanted() {
+        return Prefs.flag(this, "auto") && PermHelper.hasUsageAccess(this);
+    }
+
+    private void goForeground(Notification n) {
+        // Android 14+ mewajibkan tipe layanan foreground.
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(NOTIF_ID, n);
+        }
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
-            stopSelf();
+        String action = intent != null ? intent.getAction() : null;
+
+        if (ACTION_STOP.equals(action)) {
+            if (running) {
+                suppressPkg = gamePkg;
+                endGame(false);
+            } else if (!watching) {
+                stopSelf();
+            }
+            return watching ? START_STICKY : START_NOT_STICKY;
+        }
+
+        if (ACTION_UNWATCH.equals(action)) {
+            stopWatching();
+            if (!running) {
+                goForeground(buildWatchNotification());
+                stopForeground(true);
+                stopSelf();
+            }
             return START_NOT_STICKY;
         }
 
-        boolean overlay = true;
-        long freed = 0;
-        int requested = 0;
-        if (intent != null) {
-            String g = intent.getStringExtra(MainActivity.EXTRA_GAME);
-            if (g != null) gamePkg = g;
-            overlay = intent.getBooleanExtra(MainActivity.EXTRA_OVERLAY, true);
-            freed = intent.getLongExtra(MainActivity.EXTRA_FREED, 0);
-            requested = intent.getIntExtra(MainActivity.EXTRA_REQUESTED, 0);
-            killLoop = intent.getBooleanExtra(MainActivity.EXTRA_KILL, true);
-            blockNotifs = intent.getBooleanExtra(MainActivity.EXTRA_NOTIF, false);
-            freezeMode = intent.getBooleanExtra(MainActivity.EXTRA_FREEZE, false);
-            netFocus = intent.getBooleanExtra(MainActivity.EXTRA_NETFOCUS, false);
+        if (ACTION_WATCH.equals(action) || intent == null || intent.getStringExtra(MainActivity.EXTRA_GAME) == null) {
+            if (!running) goForeground(buildWatchNotification());
+            if (!watchWanted()) {
+                stopWatching();
+                if (!running) {
+                    stopForeground(true);
+                    stopSelf();
+                }
+                return START_NOT_STICKY;
+            }
+            startWatching();
+            return START_STICKY;
         }
 
-        // Android 14+ mewajibkan tipe layanan foreground.
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-        } else {
-            startForeground(NOTIF_ID, buildNotification());
-        }
+        beginGame(SessionRunner.Result.fromIntent(intent), false);
+        return watching ? START_STICKY : START_NOT_STICKY;
+    }
+
+    // ---------------------------------------------------------------- mulai / selesai mode game
+
+    private void beginGame(SessionRunner.Result p, boolean auto) {
+        if (running) return;
+        gamePkg = p.pkg == null ? "" : p.pkg;
+        killLoop = p.kill;
+        blockNotifs = p.notif;
+        freezeMode = p.freezeOn;
+        netFocus = p.netOk;
+        autoStarted = auto;
+        awayMs = 0;
+
+        goForeground(buildNotification());
         running = true;
-        if (Prefs.flag(this, "netfocus") && wifiLock == null) acquireWifiLock();
 
+        sessionStart = SystemClock.elapsedRealtime();
+        startBatt = SysInfo.battery(this).level;
+        peakTemp = 0f;
+        cpuSum = cpuN = gpuSum = gpuN = 0;
+        sReq = p.requested;
+        sFrozen = p.frozen;
+        sFreed = p.freedMb;
+        sBlocked = p.notif;
+        GameNotifService.resetMissed();
+
+        if (Prefs.flag(this, "netfocus") && wifiLock == null) acquireWifiLock();
         if (blockNotifs) GameNotifService.clearAll();
         handler.removeCallbacks(watchdog);
         handler.postDelayed(watchdog, KILL_INTERVAL_MS);
+        scheduleBreak();
 
-        if (overlay && canDraw() && root == null) {
+        if (p.overlay && canDraw() && root == null) {
             showPanel();
             if (root != null) openPanel(FIRST_HIDE_MS);   // tampil sebentar lalu masuk ke tepi
         }
         // Data grafik terus dicatat selama mode game, walau panel sedang tersimpan di tepi layar.
-        if (root != null && !sampling) {
-            startSampling();
-            handler.removeCallbacks(tick);
-            handler.post(tick);
-        }
-        if (root != null && requested > 0) {
+        if (root != null && !sampling) startSampling();
+        handler.removeCallbacks(tick);
+        handler.post(tick);
+        if (root != null && p.requested > 0) {
             flashToast(String.format(Locale.US, "✓ %d aplikasi dihentikan  •  RAM +%d MB",
-                    requested, freed));
+                    p.requested, p.freedMb));
         }
-        return START_NOT_STICKY;
     }
 
-    @Override
-    public void onDestroy() {
+    /** Akhiri mode game: pulihkan semuanya, simpan ringkasan, lalu kembali siaga atau berhenti. */
+    private void endGame(boolean fromDestroy) {
+        if (!running) return;
+        running = false;
+        blockNotifs = false;
         handler.removeCallbacks(tick);
         handler.removeCallbacks(hideToast);
         handler.removeCallbacks(autoHide);
         handler.removeCallbacks(watchdog);
+        handler.removeCallbacks(breakTask);
         stopSampling();
         if (wifiLock != null) {
             try {
@@ -228,24 +358,232 @@ public class GameService extends Service {
         if (sampleThread != null) {
             sampleThread.quitSafely();
             sampleThread = null;
+            sampleHandler = null;
         }
         if (root != null && wm != null) {
             try {
                 wm.removeView(root);
             } catch (Exception ignored) {
             }
-            root = null;
         }
-        running = false;
-        blockNotifs = false;
+        root = null;
+        expanded = false;
+
         GameBooster.restoreDnd(this);
         // Pulihkan aplikasi yang dibekukan dan setelan performa (butuh Shizuku, jadi di thread lain).
         final Context appCtx = getApplicationContext();
         new Thread(new Runnable() {
             @Override public void run() { GameBooster.restoreSession(appCtx); }
         }).start();
+
+        long ms = SystemClock.elapsedRealtime() - sessionStart;
+        Map<String, Integer> missed = GameNotifService.takeMissed();
+        try {
+            saveSummary(ms, missed);
+        } catch (Exception ignored) {
+        }
+        autoStarted = false;
+
+        if (fromDestroy) return;
+        if (watchWanted()) {
+            goForeground(buildWatchNotification());
+        } else {
+            stopForeground(true);
+            stopSelf();
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        stopWatching();
+        if (running) endGame(true);
+        handler.removeCallbacksAndMessages(null);
+        stopSampling();
+        if (sampleThread != null) {
+            sampleThread.quitSafely();
+            sampleThread = null;
+        }
         stopForeground(true);
         super.onDestroy();
+    }
+
+    // ---------------------------------------------------------------- aktif otomatis
+
+    private void startWatching() {
+        if (watching) return;
+        watching = true;
+        lastEventTs = System.currentTimeMillis() - 60000;
+        handler.removeCallbacks(watchTask);
+        handler.post(watchTask);
+    }
+
+    private void stopWatching() {
+        watching = false;
+        handler.removeCallbacks(watchTask);
+    }
+
+    /** Aplikasi yang sedang di layar, dibaca dari peristiwa penggunaan (butuh Akses penggunaan). */
+    private String pollForeground() {
+        UsageStatsManager u = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        if (u == null) return curFg;
+        long now = System.currentTimeMillis();
+        UsageEvents ev = u.queryEvents(Math.max(lastEventTs, now - 60000), now);
+        UsageEvents.Event e = new UsageEvents.Event();
+        while (ev != null && ev.hasNextEvent()) {
+            ev.getNextEvent(e);
+            int t = e.getEventType();
+            if (t == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                curFg = e.getPackageName();
+            } else if (t == UsageEvents.Event.MOVE_TO_BACKGROUND && e.getPackageName().equals(curFg)) {
+                curFg = null;
+            }
+        }
+        lastEventTs = now;
+        return curFg;
+    }
+
+    private boolean isTransientFg(String pkg) {
+        return pkg.equals(getPackageName()) || pkg.equals("com.android.systemui");
+    }
+
+    private void watchTick() {
+        if (!watchWanted()) {
+            stopWatching();
+            if (!running) {
+                stopForeground(true);
+                stopSelf();
+            }
+            return;
+        }
+        String fg = pollForeground();
+        if (suppressPkg != null && fg != null && !fg.equals(suppressPkg)) suppressPkg = null;
+
+        if (!running) {
+            if (!starting && fg != null && !fg.equals(suppressPkg) && GameDetect.isMine(this, fg)) {
+                startAuto(fg);
+            }
+        } else if (autoStarted) {
+            if (fg == null || fg.equals(gamePkg) || isTransientFg(fg)) {
+                awayMs = 0;
+            } else {
+                awayMs += WATCH_MS;
+                if (awayMs >= AWAY_END_MS) endGame(false);
+            }
+        }
+    }
+
+    private void startAuto(final String pkg) {
+        starting = true;
+        final Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                SessionRunner.Result r = null;
+                try {
+                    r = SessionRunner.run(app, pkg, null, false);
+                } catch (Throwable ignored) {
+                }
+                final SessionRunner.Result done = r;
+                handler.post(new Runnable() {
+                    @Override public void run() {
+                        starting = false;
+                        if (done != null && !running && watching) beginGame(done, true);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    // ---------------------------------------------------------------- ringkasan sesi
+
+    private String labelOf(String pkg) {
+        try {
+            PackageManager pm = getPackageManager();
+            return String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)));
+        } catch (Exception e) {
+            return pkg;
+        }
+    }
+
+    private void saveSummary(long ms, Map<String, Integer> missed) {
+        if (ms < 15000) return;                       // sesi sangat singkat tidak perlu dirangkum
+        List<String> lines = new ArrayList<>();
+
+        int battNow = SysInfo.battery(this).level;
+        String l1 = "Main " + SessionStats.duration(ms);
+        if (startBatt - battNow > 0) l1 += "  •  baterai −" + (startBatt - battNow) + "%";
+        lines.add(l1);
+
+        String l2 = "";
+        if (sFreed > 0) l2 += "RAM +" + sFreed + " MB";
+        if (sFrozen > 0 || sReq > 0) {
+            if (!l2.isEmpty()) l2 += "  •  ";
+            l2 += sFrozen > 0 ? sFrozen + " aplikasi dibekukan" : sReq + " aplikasi dihentikan";
+        }
+        if (!l2.isEmpty()) lines.add(l2);
+
+        String l3 = String.format(Locale.US, "Suhu tertinggi %.1f°C", peakTemp);
+        if (cpuN > 0) l3 += "  •  CPU rata-rata " + (cpuSum / cpuN) + "%";
+        if (gpuN > 0) l3 += "  •  GPU rata-rata " + (gpuSum / gpuN) + "%";
+        if (peakTemp > 0f || cpuN > 0) lines.add(l3);
+
+        if (sBlocked) {
+            int total = 0;
+            for (int v : missed.values()) total += v;
+            if (total == 0) {
+                lines.add("Tidak ada notifikasi yang terlewat");
+            } else {
+                List<Map.Entry<String, Integer>> es = new ArrayList<>(missed.entrySet());
+                Collections.sort(es, new Comparator<Map.Entry<String, Integer>>() {
+                    @Override public int compare(Map.Entry<String, Integer> a, Map.Entry<String, Integer> b) {
+                        return b.getValue() - a.getValue();
+                    }
+                });
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < es.size() && i < 3; i++) {
+                    if (i > 0) sb.append(", ");
+                    sb.append(labelOf(es.get(i).getKey())).append(' ').append(es.get(i).getValue());
+                }
+                if (es.size() > 3) sb.append(", dll.");
+                lines.add("Kamu melewatkan " + total + " notifikasi: " + sb);
+            }
+        }
+
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) body.append('\n');
+            body.append(lines.get(i));
+        }
+        String title = "Sesi terakhir  •  " + labelOf(gamePkg);
+        SessionStats.save(this, title, body.toString(), System.currentTimeMillis());
+        postSimpleNotification(NOTIF_SUMMARY_ID, "Sesi selesai  •  " + labelOf(gamePkg), body.toString());
+    }
+
+    private void trackStats() {
+        float t = SysInfo.battery(this).tempC;
+        if (t > peakTemp) peakTemp = t;
+    }
+
+    // ---------------------------------------------------------------- pengingat istirahat
+
+    private void scheduleBreak() {
+        handler.removeCallbacks(breakTask);
+        if (!Prefs.flag(this, "breakremind")) return;
+        long ms = Prefs.get(this).getInt("break_min", 60) * 60000L;
+        handler.postDelayed(breakTask, ms);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void vibrate(long ms) {
+        try {
+            Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (v == null) return;
+            if (Build.VERSION.SDK_INT >= 26) {
+                v.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                v.vibrate(ms);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     // ---------------------------------------------------------------- notifikasi
@@ -275,6 +613,59 @@ public class GameService extends Service {
                 .setOngoing(true)
                 .addAction(0, "Hentikan", stopPi);
         return b.build();
+    }
+
+    /** Notifikasi saat siaga: menunggu game dibuka. */
+    @SuppressWarnings("deprecation")
+    private Notification buildWatchNotification() {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel ch = new NotificationChannel(CHANNEL_WATCH, "Siaga otomatis",
+                    NotificationManager.IMPORTANCE_MIN);
+            nm.createNotificationChannel(ch);
+        }
+        int piFlags = PendingIntent.FLAG_UPDATE_CURRENT
+                | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+        PendingIntent open = PendingIntent.getActivity(this, 0,
+                new Intent(this, MainActivity.class), piFlags);
+        Notification.Builder b = Build.VERSION.SDK_INT >= 26
+                ? new Notification.Builder(this, CHANNEL_WATCH)
+                : new Notification.Builder(this);
+        b.setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle("GameBoost siaga")
+                .setContentText("Mode game nyala otomatis saat game dibuka")
+                .setContentIntent(open)
+                .setOngoing(true);
+        return b.build();
+    }
+
+    /** Notifikasi biasa (ringkasan sesi, pengingat istirahat). */
+    @SuppressWarnings("deprecation")
+    private void postSimpleNotification(int id, String title, String text) {
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel ch = new NotificationChannel(CHANNEL_SUMMARY, "Ringkasan sesi",
+                        NotificationManager.IMPORTANCE_DEFAULT);
+                nm.createNotificationChannel(ch);
+            }
+            if (Build.VERSION.SDK_INT >= 33 && !PermHelper.hasNotifPerm(this)) return;
+            int piFlags = PendingIntent.FLAG_UPDATE_CURRENT
+                    | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+            PendingIntent open = PendingIntent.getActivity(this, 2,
+                    new Intent(this, MainActivity.class), piFlags);
+            Notification.Builder b = Build.VERSION.SDK_INT >= 26
+                    ? new Notification.Builder(this, CHANNEL_SUMMARY)
+                    : new Notification.Builder(this);
+            b.setSmallIcon(R.drawable.ic_stat)
+                    .setContentTitle(title)
+                    .setContentText(text.split("\n")[0])
+                    .setStyle(new Notification.BigTextStyle().bigText(text))
+                    .setContentIntent(open)
+                    .setAutoCancel(true);
+            nm.notify(id, b.build());
+        } catch (Exception ignored) {
+        }
     }
 
     // ---------------------------------------------------------------- jendela mengambang
@@ -583,6 +974,8 @@ public class GameService extends Service {
         Metric cpu = metrics[M_CPU];
         if (s.cpu >= 0) {
             cpu.value.setText(s.cpu + "%");
+            cpuSum += s.cpu;
+            cpuN++;
             cpu.spark.push(s.cpu);
             cpu.sub.setText(s.cpuByFreq ? "perkiraan dari frekuensi" : "beban prosesor");
         } else {
@@ -593,6 +986,8 @@ public class GameService extends Service {
         Metric gpu = metrics[M_GPU];
         if (s.gpu >= 0) {
             gpu.value.setText(s.gpu + "%");
+            gpuSum += s.gpu;
+            gpuN++;
             gpu.spark.push(s.gpu);
             String name = s.gpuModel != null ? s.gpuModel : "beban grafis";
             gpu.sub.setText(s.gpuByFreq ? name + " • dari frekuensi" : name);
@@ -636,11 +1031,15 @@ public class GameService extends Service {
     }
 
     private void flashToast(String msg) {
+        flashToast(msg, 4500);
+    }
+
+    private void flashToast(String msg, long ms) {
         if (tvToast == null) return;
         tvToast.setText(msg);
         tvToast.setVisibility(View.VISIBLE);
         handler.removeCallbacks(hideToast);
-        handler.postDelayed(hideToast, 4500);
+        handler.postDelayed(hideToast, ms);
     }
 
     /** Minta Wi-Fi tetap aktif dan, di Android 10+, memakai mode latensi rendah selama bermain. */

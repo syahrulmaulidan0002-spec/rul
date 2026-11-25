@@ -49,10 +49,6 @@ public class MainActivity extends Activity {
 
     private static final String KEY_MY_GAMES = "my_games";
 
-    private static final String[] GAME_HINTS = {
-            "legends", "freefire", "pubg", "codm", "callofduty", "genshin", "supercell",
-            "roblox", "minecraft", "garena", "tencent", "mobilelegends", "honkai", "efootball"
-    };
 
     private SharedPreferences prefs;
     private final List<GameItem> all = new ArrayList<>();      // semua aplikasi yang bisa dibuka
@@ -167,6 +163,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        GameService.syncWatch(this);
         updateHeroStatus();
         updateShizuku();
         handler.post(ticker);
@@ -220,14 +217,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean detectGame(String pkg, ApplicationInfo ai) {
-        if (Build.VERSION.SDK_INT >= 26 && ai != null && ai.category == ApplicationInfo.CATEGORY_GAME) {
-            return true;
-        }
-        String p = pkg.toLowerCase(Locale.US);
-        for (String h : GAME_HINTS) {
-            if (p.contains(h)) return true;
-        }
-        return false;
+        return GameDetect.detect(pkg, ai);
     }
 
     /** Bagi aplikasi menjadi "Game saya" dan "Aplikasi lain", lalu segarkan tampilan. */
@@ -305,63 +295,36 @@ public class MainActivity extends Activity {
             toast("Pilih game dulu dari Game saya");
             return;
         }
-        final boolean kill = Prefs.flag(this, "kill");
-        final boolean notif = Prefs.flag(this, "notif");
-        final boolean dnd = Prefs.flag(this, "dnd");
-        final boolean overlay = Prefs.flag(this, "overlay");
-        final boolean freeze = Prefs.flag(this, "freeze");
-        final boolean perf = Prefs.flag(this, "perf");
-        final boolean netfocus = Prefs.flag(this, "netfocus");
-
         String missing = missingPermissions();
         if (missing != null) {
             toast("Atur dulu: " + missing);
             openSettings();
             return;
         }
-
-        final boolean shizuku = ShizukuHelper.ready();
-        final boolean freezeOn = freeze && shizuku;
-        if ((freeze || perf || netfocus) && !shizuku) {
+        if ((Prefs.flag(this, "freeze") || Prefs.flag(this, "perf") || Prefs.flag(this, "netfocus"))
+                && !ShizukuHelper.ready()) {
             toast("Shizuku belum aktif, memakai cara biasa. Ketuk kartu Shizuku untuk panduannya.");
+        }
+
+        if (Prefs.flag(this, "anim")) {
+            // Animasi masuk game: persiapan dijalankan di layar itu, lalu game terbuka.
+            startActivity(new Intent(this, LaunchActivity.class).putExtra(LaunchActivity.EXTRA_PKG, game.pkg));
+            return;
         }
 
         btnMain.setEnabled(false);
         btnMain.setText("Membersihkan…");
-
+        final Context app = getApplicationContext();
         new Thread(new Runnable() {
             @Override public void run() {
-                final GameBooster.Result r = kill ? GameBooster.boost(MainActivity.this, game.pkg, freezeOn) : null;
-                if (perf && shizuku) GameBooster.enablePerf(MainActivity.this, game.pkg);
-                final boolean netOk = netfocus && shizuku
-                        && GameBooster.enableNetFocus(MainActivity.this, game.pkg);
+                try {
+                    SessionRunner.run(app, game.pkg, null, true);
+                } catch (Throwable ignored) {
+                }
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
-                        if (dnd) GameBooster.enableDnd(MainActivity.this);
-
-                        Intent s = new Intent(MainActivity.this, GameService.class);
-                        s.putExtra(EXTRA_GAME, game.pkg);
-                        s.putExtra(EXTRA_OVERLAY, overlay);
-                        s.putExtra(EXTRA_KILL, kill);
-                        s.putExtra(EXTRA_NOTIF, notif);
-                        s.putExtra(EXTRA_FREEZE, freezeOn);
-                        s.putExtra(EXTRA_NETFOCUS, netOk);
-                        if (r != null) {
-                            s.putExtra(EXTRA_FREED, r.freedMb);
-                            s.putExtra(EXTRA_REQUESTED, r.requested);
-                        }
-                        if (Build.VERSION.SDK_INT >= 26) startForegroundService(s);
-                        else startService(s);
-
-                        if (r != null) {
-                            String what = r.frozen > 0
-                                    ? String.format(Locale.US, "%d aplikasi dibekukan", r.frozen)
-                                    : String.format(Locale.US, "%d aplikasi dihentikan", r.requested);
-                            toast(String.format(Locale.US, "%s  •  RAM +%d MB  •  cara: %s",
-                                    what, r.freedMb, r.method));
-                        }
                         btnMain.setEnabled(true);
-                        launchGame(game.pkg);
+                        if (!GameLauncher.launch(MainActivity.this, game.pkg)) toast("Game tidak bisa dibuka");
                         updateBottom();
                     }
                 });
@@ -371,42 +334,7 @@ public class MainActivity extends Activity {
 
     /** Daftar izin yang masih kurang untuk setelan sekarang, atau null jika sudah lengkap. */
     private String missingPermissions() {
-        List<String> m = new ArrayList<>();
-        if (Prefs.flag(this, "overlay") && !PermHelper.canOverlay(this)) m.add("Jendela mengambang");
-        if (Prefs.flag(this, "dnd") && Build.VERSION.SDK_INT >= 23 && !GameBooster.hasDndAccess(this)) {
-            m.add("Jangan Ganggu");
-        }
-        if (Prefs.flag(this, "notif") && !GameNotifService.isEnabled(this)) m.add("Akses notifikasi");
-        if (m.isEmpty()) return null;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < m.size(); i++) {
-            if (i > 0) sb.append(", ");
-            sb.append(m.get(i));
-        }
-        return sb.toString();
-    }
-
-    private void launchGame(String pkg) {
-        Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
-        if (i == null) {
-            toast("Game tidak bisa dibuka");
-            return;
-        }
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        Bundle opts = null;
-        if (Prefs.flag(this, "freeform") && Build.VERSION.SDK_INT >= 24) {
-            // Eksperimental: hanya berjalan di HP yang mendukung jendela freeform.
-            DisplayMetrics dm = getResources().getDisplayMetrics();
-            int w = dm.widthPixels;
-            int h = dm.heightPixels;
-            Rect r = new Rect(w / 20, h / 8, w - w / 20, h / 8 + (int) (h * 0.55f));
-            opts = ActivityOptions.makeBasic().setLaunchBounds(r).toBundle();
-        }
-        try {
-            startActivity(i, opts);
-        } catch (Exception e) {
-            toast("Gagal membuka game");
-        }
+        return PermHelper.missing(this);
     }
 
     // ---------------------------------------------------------------- tampilan
