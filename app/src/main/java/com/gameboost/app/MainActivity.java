@@ -395,17 +395,20 @@ public class MainActivity extends Activity {
     private void updateHeroStatus() {
         if (heroStatus == null) return;
         if (GameService.running) {
-            heroStatus.setText("● Mode game sedang aktif");
+            heroStatus.setText("Mode game sedang aktif");
             heroStatus.setTextColor(SysInfo.color(this, R.color.ok));
+            Icons.start(heroStatus, R.drawable.ic_dot, 12, SysInfo.color(this, R.color.ok));
             return;
         }
         String missing = missingPermissions();
         if (missing != null) {
             heroStatus.setText("Perlu diatur: " + missing + "  •  ketuk untuk membuka Pengaturan");
             heroStatus.setTextColor(SysInfo.color(this, R.color.warn));
+            Icons.clear(heroStatus);
         } else {
-            heroStatus.setText("✓ Siap dimainkan");
+            heroStatus.setText("Siap dimainkan");
             heroStatus.setTextColor(SysInfo.color(this, R.color.ok));
+            Icons.start(heroStatus, R.drawable.ic_check, 14, SysInfo.color(this, R.color.ok));
         }
     }
 
@@ -467,7 +470,9 @@ public class MainActivity extends Activity {
         tvTemp.setText(String.format(Locale.US, "%.1f°C", b.tempC));
         tvTemp.setTextColor(SysInfo.color(this,
                 b.tempC >= 43f ? R.color.danger : (b.tempC >= 40f ? R.color.warn : R.color.text)));
-        tvBatt.setText(String.format(Locale.US, "%d%%%s", b.level, b.charging ? " ⚡" : ""));
+        tvBatt.setText(String.format(Locale.US, "%d%%", b.level));
+        if (b.charging) Icons.end(tvBatt, R.drawable.ic_bolt, 13, SysInfo.color(this, R.color.ok));
+        else Icons.clear(tvBatt);
         ReadinessScore.Result rs = ReadinessScore.compute(this);
         heroScore.setText("Kesiapan " + rs.score + "/100  •  " + rs.tip);
         heroScore.setTextColor(SysInfo.color(this, rs.colorRes));

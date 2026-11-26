@@ -258,7 +258,7 @@ public class SettingsActivity extends Activity {
     private void buildSwitchRows(LinearLayout parent) {
         addSwitch(parent, "Aktif otomatis saat game dibuka", R.drawable.ic_bolt, 0xFFBF5AF2, "auto");
         addSwitch(parent, "Animasi masuk game", R.drawable.ic_sparkle, 0xFF0A84FF, "anim");
-        addSwitch(parent, "Tutup semua aplikasi latar belakang", R.drawable.ic_sparkle, 0xFFFF9F0A, "kill");
+        addSwitch(parent, "Tutup semua aplikasi latar belakang", R.drawable.ic_broom, 0xFFFF9F0A, "kill");
         addSwitch(parent, "Hapus semua notifikasi yang masuk", R.drawable.ic_bell, 0xFFFF453A, "notif");
         addSwitch(parent, "Hening total (Jangan Ganggu)", R.drawable.ic_moon, 0xFF5E5CE6, "dnd");
         addSwitch(parent, "Jendela mengambang saat bermain", R.drawable.ic_window, 0xFF0A84FF, "overlay");

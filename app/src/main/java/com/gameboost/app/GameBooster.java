@@ -51,6 +51,13 @@ final class GameBooster {
     private static final String KEY_PREV_LOW_POWER = "prev_low_power";
     private static final Pattern SAFE_PKG = Pattern.compile("[A-Za-z0-9._]+");
 
+    /** RAM bebas sebelum/sesudah pembersihan terakhir (untuk animasi). */
+    static volatile long lastBeforeMb, lastAfterMb;
+
+    static long availMbNow(Context c) {
+        return availMb((ActivityManager) c.getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE));
+    }
+
     private GameBooster() {}
 
     static final class Result {
@@ -106,6 +113,8 @@ final class GameBooster {
             Thread.currentThread().interrupt();
         }
         res.freedMb = Math.max(0, availMb(am) - before);
+        lastBeforeMb = before;
+        lastAfterMb = before + res.freedMb;
         return res;
     }
 
@@ -145,7 +154,7 @@ final class GameBooster {
     }
 
     /** Semua aplikasi pengguna yang boleh ditutup (bukan game dan bukan aplikasi penting). */
-    private static Set<String> targets(Context app, String gamePkg) {
+    static Set<String> targets(Context app, String gamePkg) {
         PackageManager pm = app.getPackageManager();
         Set<String> keep = protectedPackages(app, gamePkg);
 

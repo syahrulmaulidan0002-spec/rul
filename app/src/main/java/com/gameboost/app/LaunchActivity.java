@@ -1,8 +1,10 @@
 package com.gameboost.app;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,6 +14,8 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
@@ -21,8 +25,12 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Animasi masuk game bergaya iOS: ikon dan cincin tipis di tengah, lalu langkah yang benar-benar
@@ -47,6 +55,13 @@ public class LaunchActivity extends Activity {
     private LaunchRing ring;
     private TextView title, sub;
     private LinearLayout steps;
+    private FrameLayout stage;
+    private View ramBox;
+    private TextView ramNum, ramDelta;
+    private final List<View> orbit = new ArrayList<>();
+    private final List<float[]> orbitDir = new ArrayList<>();
+    private long ramShown = 0;
+    private boolean flewAway = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +91,13 @@ public class LaunchActivity extends Activity {
         title = findViewById(R.id.launchTitle);
         sub = findViewById(R.id.launchSub);
         steps = findViewById(R.id.launchSteps);
+        stage = findViewById(R.id.launchStage);
+        ramBox = findViewById(R.id.launchRamBox);
+        ramNum = findViewById(R.id.launchRam);
+        ramDelta = findViewById(R.id.launchRamDelta);
+        ramShown = GameBooster.availMbNow(this);
+        ramNum.setText(fmtRam(ramShown));
+        ramBox.animate().alpha(1f).setStartDelay(350).setDuration(400).start();
 
         try {
             Drawable d = getPackageManager().getApplicationIcon(pkg);
@@ -103,6 +125,7 @@ public class LaunchActivity extends Activity {
         sub.animate().alpha(1f).setStartDelay(250).setDuration(350).start();
 
         startWork();
+        if (Prefs.flag(this, "kill")) prepareOrbit();
         ui.postDelayed(new Runnable() {
             @Override public void run() { launchGame(); }
         }, TIMEOUT_MS);
@@ -146,7 +169,10 @@ public class LaunchActivity extends Activity {
                                 SessionRunner.sleepQuiet(MIN_STEP_MS - (SessionRunner.now() - beganAt));
                             }
                             ui.post(new Runnable() {
-                                @Override public void run() { finishRow(key, detail); }
+                                @Override public void run() {
+                                    finishRow(key, detail);
+                                    if ("kill".equals(key)) onKillDone();
+                                }
                             });
                         }
                     }, true);
@@ -224,12 +250,20 @@ public class LaunchActivity extends Activity {
                 .setInterpolator(new OvershootInterpolator(2f)).start();
         ((TextView) r[1]).setText(detail);
         doneCount++;
+        launchRoot.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
         if (planned > 0) ring.setProgress(Math.min(1f, doneCount / (float) planned));
     }
 
     private void finishUp() {
         if (launched) return;
         ring.setDone();
+        ring.animate().scaleX(1.07f).scaleY(1.07f).setDuration(160).withEndAction(new Runnable() {
+            @Override public void run() {
+                if (ring != null) ring.animate().scaleX(1f).scaleY(1f).setDuration(220)
+                        .setInterpolator(new OvershootInterpolator(2f)).start();
+            }
+        }).start();
+        flyAway();
         sub.setText("Siap");
         sub.setTextColor(SysInfo.color(this, R.color.ok));
         launchRoot.performHapticFeedback(Build.VERSION.SDK_INT >= 30
@@ -239,21 +273,135 @@ public class LaunchActivity extends Activity {
         }, fast ? 60 : 240);
     }
 
-    /** Layar memudar sambil sedikit membesar, lalu game terbuka. */
+    /** Ikon game melebar memenuhi layar seperti membuka aplikasi di iOS, lalu game terbuka. */
     private void launchGame() {
         if (launched) return;
         launched = true;
         if (launchRoot != null) {
-            launchRoot.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f).setDuration(200).start();
+            float screen = Math.max(getResources().getDisplayMetrics().widthPixels,
+                    getResources().getDisplayMetrics().heightPixels);
+            float k = screen / dp(96) * 1.25f;
+            View[] others = {title, sub, steps, ramBox, ring, stage};
+            for (View v : others) v.animate().alpha(0f).setStartDelay(0).setDuration(170).start();
+            launchIcon.animate().scaleX(k).scaleY(k).alpha(0f).setStartDelay(0).setDuration(430)
+                    .setInterpolator(new AccelerateDecelerateInterpolator()).start();
         }
-        if (!GameLauncher.launch(this, pkg)) {
-            Toast.makeText(this, "Game tidak bisa dibuka", Toast.LENGTH_LONG).show();
-        }
+        ui.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!GameLauncher.launch(LaunchActivity.this, pkg)) {
+                    Toast.makeText(LaunchActivity.this, "Game tidak bisa dibuka", Toast.LENGTH_LONG).show();
+                }
+            }
+        }, 150);
         ui.postDelayed(new Runnable() {
             @Override public void run() {
                 finish();
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             }
-        }, 240);
+        }, 450);
+    }
+
+    // ---------------------------------------------------------------- orbit ikon aplikasi
+
+    private static String fmtRam(long mb) {
+        return mb >= 1000 ? String.format(Locale.US, "%.2f GB", mb / 1024f) : mb + " MB";
+    }
+
+    /** Ambil ikon aplikasi yang akan dihentikan, lalu tampilkan mengorbit di sekitar ikon game. */
+    private void prepareOrbit() {
+        final android.content.Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final List<Drawable> icons = new ArrayList<>();
+                try {
+                    PackageManager pm = app.getPackageManager();
+                    Set<String> targets = GameBooster.targets(app, pkg);
+                    for (String p : targets) {
+                        if (icons.size() >= 10) break;
+                        if (pm.getLaunchIntentForPackage(p) == null) continue;   // hanya yang punya ikon
+                        try {
+                            icons.add(pm.getApplicationIcon(p));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                } catch (Throwable ignored) {
+                }
+                ui.post(new Runnable() {
+                    @Override public void run() { showOrbit(icons); }
+                });
+            }
+        }).start();
+    }
+
+    private void showOrbit(final List<Drawable> icons) {
+        if (launched || flewAway || icons.isEmpty() || stage == null) return;
+        stage.post(new Runnable() {
+            @Override public void run() {
+                if (launched || flewAway) return;
+                int[] a = new int[2], b = new int[2];
+                ring.getLocationInWindow(a);
+                stage.getLocationInWindow(b);
+                float cx = a[0] - b[0] + ring.getWidth() / 2f;
+                float cy = a[1] - b[1] + ring.getHeight() / 2f;
+                int n = icons.size();
+                int sz = dp(34);
+                float rad = dp(112);
+                for (int i = 0; i < n; i++) {
+                    double ang = Math.toRadians(-90 + i * 360.0 / n);
+                    float dx = (float) Math.cos(ang), dy = (float) Math.sin(ang);
+                    ImageView v = new ImageView(LaunchActivity.this);
+                    v.setImageDrawable(icons.get(i));
+                    v.setBackgroundResource(R.drawable.bg_app_icon);
+                    v.setClipToOutline(true);
+                    FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(sz, sz);
+                    lp.leftMargin = Math.round(cx + dx * rad - sz / 2f);
+                    lp.topMargin = Math.round(cy + dy * rad - sz / 2f);
+                    v.setAlpha(0f);
+                    v.setScaleX(0.3f);
+                    v.setScaleY(0.3f);
+                    stage.addView(v, lp);
+                    orbit.add(v);
+                    orbitDir.add(new float[]{dx, dy});
+                    v.animate().alpha(0.95f).scaleX(1f).scaleY(1f).setStartDelay(i * 55L).setDuration(320)
+                            .setInterpolator(new OvershootInterpolator(1.4f)).start();
+                }
+            }
+        });
+    }
+
+    /** Aplikasi latar selesai ditutup: ikonnya mengecil dan terbang keluar satu per satu. */
+    private void flyAway() {
+        if (flewAway) return;
+        flewAway = true;
+        for (int i = 0; i < orbit.size(); i++) {
+            final View v = orbit.get(i);
+            float[] d = orbitDir.get(i);
+            v.animate().translationX(d[0] * dp(120)).translationY(d[1] * dp(120))
+                    .scaleX(0.15f).scaleY(0.15f).alpha(0f)
+                    .setStartDelay(i * 45L).setDuration(460)
+                    .setInterpolator(new AccelerateInterpolator(1.3f)).start();
+        }
+    }
+
+    /** Pembersihan selesai: ikon terbang keluar dan angka RAM bebas naik. */
+    private void onKillDone() {
+        flyAway();
+        final long from = ramShown;
+        long to = GameBooster.lastAfterMb;
+        if (to <= from) return;
+        ramShown = to;
+        ValueAnimator va = ValueAnimator.ofFloat(from, to);
+        va.setDuration(800);
+        va.setStartDelay(250);
+        va.setInterpolator(new DecelerateInterpolator(1.5f));
+        va.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override public void onAnimationUpdate(ValueAnimator an) {
+                ramNum.setText(fmtRam(Math.round((Float) an.getAnimatedValue())));
+            }
+        });
+        va.start();
+        ramDelta.setText("+" + (to - from) + " MB");
+        Icons.start(ramDelta, R.drawable.ic_arrow_up, 11, SysInfo.color(this, R.color.ok));
+        ramDelta.animate().alpha(1f).setStartDelay(450).setDuration(350).start();
     }
 }

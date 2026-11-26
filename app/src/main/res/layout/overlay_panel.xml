@@ -294,7 +294,7 @@
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_sparkle"
+                    android:src="@drawable/ic_broom"
                     android:tint="#64D2FF" />
 
                 <TextView

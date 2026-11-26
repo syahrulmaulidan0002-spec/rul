@@ -339,8 +339,8 @@ public class GameService extends Service {
         handler.removeCallbacks(tick);
         handler.post(tick);
         if (root != null && p.requested > 0) {
-            flashToast(String.format(Locale.US, "✓ %d aplikasi dihentikan  •  RAM +%d MB",
-                    p.requested, p.freedMb));
+            toastIcon(String.format(Locale.US, "%d aplikasi dihentikan  •  RAM +%d MB",
+                    p.requested, p.freedMb), R.drawable.ic_check, R.color.ok);
         }
     }
 
@@ -1034,12 +1034,16 @@ public class GameService extends Service {
 
         Metric net = metrics[M_NET];
         if (s.rxBps >= 0) {
-            net.value.setText("↓ " + SysStats.speed(s.rxBps));
+            net.value.setText(SysStats.speed(s.rxBps));
+            Icons.start(net.value, R.drawable.ic_arrow_down, 11, 0xFFFF9F0A);
             net.spark.push(s.rxBps / 1024f);
-            net.sub.setText("↑ " + SysStats.speed(s.txBps) + (netType.isEmpty() ? "" : "  •  " + netType));
+            net.sub.setText(SysStats.speed(s.txBps) + (netType.isEmpty() ? "" : "  •  " + netType));
+            Icons.start(net.sub, R.drawable.ic_arrow_up, 9, 0xB8FFFFFF);
         } else {
             net.value.setText("—");
+            Icons.clear(net.value);
             net.sub.setText(netType);
+            Icons.clear(net.sub);
         }
     }
 
@@ -1057,8 +1061,8 @@ public class GameService extends Service {
                         cleaning = false;
                         if (root == null) return;
                         tvClean.setText("Bersihkan");
-                        flashToast(String.format(Locale.US, "✓ RAM +%d MB  •  %d aplikasi dihentikan",
-                                r.freedMb, r.requested));
+                        toastIcon(String.format(Locale.US, "RAM +%d MB  •  %d aplikasi dihentikan",
+                                r.freedMb, r.requested), R.drawable.ic_check, R.color.ok);
                         if (expanded) scheduleAutoHide(AUTO_HIDE_MS);
                     }
                 });
@@ -1143,7 +1147,7 @@ public class GameService extends Service {
                             if (ok) {
                                 recStart = System.currentTimeMillis();
                                 handler.post(recTick);
-                                flashToast("● Merekam…");
+                                toastIcon("Merekam…", R.drawable.ic_record, R.color.danger);
                             } else {
                                 flashToast("Rekam gagal dimulai");
                             }
@@ -1152,7 +1156,8 @@ public class GameService extends Service {
                             handler.removeCallbacks(recTick);
                             if (name != null) postSimpleNotification(NOTIF_SHOT_ID + 1,
                                     "Rekaman tersimpan", "Folder Movies/GameBoost");
-                            flashToast(name != null ? "✓ Rekaman tersimpan" : "Rekaman tidak ditemukan");
+                            if (name != null) toastIcon("Rekaman tersimpan", R.drawable.ic_check, R.color.ok);
+                            else flashToast("Rekaman tidak ditemukan");
                         }
                         updateRecUi();
                     }
@@ -1165,8 +1170,19 @@ public class GameService extends Service {
         flashToast(msg, 4500);
     }
 
+    /** Pesan singkat dengan ikon di depannya (pengganti simbol/emoji). */
+    private void toastIcon(String msg, int iconRes, int colorRes) {
+        flashToast(msg, 4500);
+        if (tvToast == null) return;
+        int c = SysInfo.color(this, colorRes);
+        tvToast.setTextColor(c);
+        Icons.start(tvToast, iconRes, 14, c);
+    }
+
     private void flashToast(String msg, long ms) {
         if (tvToast == null) return;
+        Icons.clear(tvToast);
+        tvToast.setTextColor(SysInfo.color(this, R.color.ok));
         tvToast.setText(msg);
         tvToast.setVisibility(View.VISIBLE);
         handler.removeCallbacks(hideToast);
