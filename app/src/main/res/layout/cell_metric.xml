@@ -40,11 +40,12 @@
     <com.gameboost.app.SparkView
         android:id="@+id/cellSpark"
         android:layout_width="match_parent"
-        android:layout_height="38dp"
-        android:layout_marginTop="6dp" />
+        android:layout_height="50dp"
+        android:layout_marginTop="4dp" />
 
     <TextView
         android:id="@+id/cellSub"
+        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"

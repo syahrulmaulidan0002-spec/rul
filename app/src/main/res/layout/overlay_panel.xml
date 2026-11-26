@@ -196,6 +196,7 @@
 
         <TextView
             android:id="@+id/tvHint"
+            android:visibility="gone"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
@@ -226,7 +227,7 @@
             <LinearLayout
                 android:id="@+id/btnShot"
                 android:layout_width="0dp"
-                android:layout_height="54dp"
+                android:layout_height="46dp"
                 android:layout_marginStart="0dp"
                 android:layout_weight="1"
                 android:clickable="true"
@@ -254,7 +255,7 @@
             <LinearLayout
                 android:id="@+id/btnRec"
                 android:layout_width="0dp"
-                android:layout_height="54dp"
+                android:layout_height="46dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
                 android:clickable="true"
@@ -282,7 +283,7 @@
             <LinearLayout
                 android:id="@+id/btnClean"
                 android:layout_width="0dp"
-                android:layout_height="54dp"
+                android:layout_height="46dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
                 android:clickable="true"
@@ -310,7 +311,7 @@
             <LinearLayout
                 android:id="@+id/btnStop"
                 android:layout_width="0dp"
-                android:layout_height="54dp"
+                android:layout_height="46dp"
                 android:layout_marginStart="6dp"
                 android:layout_weight="1"
                 android:clickable="true"

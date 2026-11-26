@@ -1061,6 +1061,9 @@ public class GameService extends Service {
             net.sub.setText(netType);
             Icons.clear(net.sub);
         }
+
+        // RAM ikut dicatat di siklus yang sama supaya keempat grafik sinkron.
+        metrics[M_RAM].spark.push(SysInfo.ram(this).usedPct);
     }
 
     private void cleanNow() {
@@ -1266,7 +1269,6 @@ public class GameService extends Service {
 
         Metric ram = metrics[M_RAM];
         ram.value.setText(r.usedPct + "%");
-        ram.spark.push(r.usedPct);
         ram.sub.setText(String.format(Locale.US, "%d / %d MB", r.usedMb, r.totalMb));
 
         tvTemp.setText(String.format(Locale.US, "%.1f°C", b.tempC));
