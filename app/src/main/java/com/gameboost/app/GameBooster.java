@@ -308,15 +308,21 @@ final class GameBooster {
         if (!ShizukuHelper.ready()) return -1;
 
         StringBuilder sb = new StringBuilder();
-        for (String p : frozen) {
-            if (SAFE_PKG.matcher(p).matches()) sb.append("pm unsuspend --user 0 ").append(p).append('\n');
-        }
+        // Setelan dulu (cepat), lalu aplikasi dibuka bekunya paralel 8 sekaligus: satu per satu
+        // terlalu lambat di HP lama karena tiap perintah memulai proses baru.
         if (perf) appendPerfRestore(sp, sb);
         if (net) {
             if (!sp.getBoolean(KEY_NET_PREV, false)) sb.append("cmd netpolicy set restrict-background false\n");
             int uid = sp.getInt(KEY_NET_UID, -1);
             if (uid >= 0) sb.append("cmd netpolicy remove restrict-background-whitelist ").append(uid).append('\n');
         }
+        int n = 0;
+        for (String p : frozen) {
+            if (!SAFE_PKG.matcher(p).matches()) continue;
+            sb.append("pm unsuspend --user 0 ").append(p).append(" >/dev/null &\n");
+            if (++n % 8 == 0) sb.append("wait\n");
+        }
+        sb.append("wait\n");
 
         String out = ShizukuHelper.exec(sb.toString());
         if (out == null) return -1;

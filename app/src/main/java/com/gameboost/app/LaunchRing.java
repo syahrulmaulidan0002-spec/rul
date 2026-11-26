@@ -70,7 +70,7 @@ public class LaunchRing extends View {
         float h = getHeight();
         float size = Math.min(w, h);
         float stroke = size * 0.028f;
-        float pad = stroke / 2f + 1f;
+        float pad = stroke * 2.4f;        // ruang untuk pendar di luar garis
         rect.set((w - size) / 2f + pad, (h - size) / 2f + pad,
                 (w + size) / 2f - pad, (h + size) / 2f - pad);
         track.setStrokeWidth(stroke);

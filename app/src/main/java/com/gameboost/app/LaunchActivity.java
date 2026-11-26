@@ -345,7 +345,7 @@ public class LaunchActivity extends Activity {
                 float cy = a[1] - b[1] + ring.getHeight() / 2f;
                 int n = icons.size();
                 int sz = dp(34);
-                float rad = dp(112);
+                float rad = dp(104);
                 for (int i = 0; i < n; i++) {
                     double ang = Math.toRadians(-90 + i * 360.0 / n);
                     float dx = (float) Math.cos(ang), dy = (float) Math.sin(ang);
