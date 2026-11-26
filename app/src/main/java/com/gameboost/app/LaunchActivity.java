@@ -32,7 +32,7 @@ import java.util.Map;
 public class LaunchActivity extends Activity {
 
     static final String EXTRA_PKG = "pkg";
-    private static final long MIN_STEP_MS = 420;
+    private static final long MIN_STEP_MS = 160;
     private static final long TIMEOUT_MS = 15000;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -236,7 +236,7 @@ public class LaunchActivity extends Activity {
                 ? HapticFeedbackConstants.CONFIRM : HapticFeedbackConstants.LONG_PRESS);
         ui.postDelayed(new Runnable() {
             @Override public void run() { launchGame(); }
-        }, fast ? 80 : 520);
+        }, fast ? 60 : 240);
     }
 
     /** Layar memudar sambil sedikit membesar, lalu game terbuka. */
@@ -244,7 +244,7 @@ public class LaunchActivity extends Activity {
         if (launched) return;
         launched = true;
         if (launchRoot != null) {
-            launchRoot.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f).setDuration(260).start();
+            launchRoot.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f).setDuration(200).start();
         }
         if (!GameLauncher.launch(this, pkg)) {
             Toast.makeText(this, "Game tidak bisa dibuka", Toast.LENGTH_LONG).show();
@@ -254,6 +254,6 @@ public class LaunchActivity extends Activity {
                 finish();
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             }
-        }, 320);
+        }, 240);
     }
 }

@@ -74,11 +74,17 @@ final class GameBooster {
 
         if (ShizukuHelper.ready()) {
             StringBuilder sb = new StringBuilder();
+            // Satu per satu terlalu lambat di HP lama (tiap perintah memulai proses baru),
+            // jadi dijalankan paralel 6 aplikasi sekaligus.
+            int n = 0;
             for (String p : targets) {
                 if (!SAFE_PKG.matcher(p).matches()) continue;
-                sb.append("am force-stop ").append(p).append('\n');
-                if (freeze) sb.append("pm suspend --user 0 ").append(p).append('\n');
+                sb.append("(am force-stop ").append(p);
+                if (freeze) sb.append("; pm suspend --user 0 ").append(p);
+                sb.append(") &\n");
+                if (++n % 6 == 0) sb.append("wait\n");
             }
+            sb.append("wait\n");
             if (freeze) rememberSuspended(app, targets);
             if (freeze) sb.append("am kill-all\n");          // sisa proses cache ikut dimatikan
             String out = ShizukuHelper.exec(sb.toString());
@@ -95,7 +101,7 @@ final class GameBooster {
         }
 
         try {
-            Thread.sleep(800);
+            Thread.sleep(400);
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         }
