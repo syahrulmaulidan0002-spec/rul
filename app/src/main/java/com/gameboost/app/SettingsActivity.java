@@ -9,7 +9,13 @@ import android.graphics.Insets;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.SeekBar;
 import android.view.WindowInsets;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
@@ -64,6 +70,91 @@ public class SettingsActivity extends Activity {
 
         buildPermRows((LinearLayout) findViewById(R.id.permList));
         buildSwitchRows((LinearLayout) findViewById(R.id.switchList));
+        buildPreview();
+    }
+
+    // ---------------------------------------------------------------- simulasi panel
+
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private View previewRoot;
+    private SparkView[] previewSparks;
+    private TextView[] previewVals;
+    private int previewTick = 0;
+    private final Runnable previewStep = new Runnable() {
+        @Override public void run() {
+            previewTick++;
+            double t = previewTick * 0.5;
+            float[] v = {
+                    (float) (45 + 30 * Math.sin(t) + 8 * Math.sin(t * 2.7)),
+                    (float) (55 + 25 * Math.sin(t * 0.8 + 1) + 6 * Math.sin(t * 3.1)),
+                    (float) (62 + 8 * Math.sin(t * 0.4) + 3 * Math.sin(t * 2)),
+                    (float) (180 + 140 * Math.sin(t * 0.9 + 2) + 40 * Math.sin(t * 3))};
+            String[] txt = {Math.round(v[0]) + "%", Math.round(v[1]) + "%", Math.round(v[2]) + "%",
+                    Math.max(1, Math.round(v[3])) + " KB/s"};
+            for (int i = 0; i < 4; i++) {
+                previewSparks[i].push(Math.max(0f, v[i]));
+                previewVals[i].setText(txt[i]);
+            }
+            ui.postDelayed(this, 1300);
+        }
+    };
+
+    private void buildPreview() {
+        FrameLayout box = findViewById(R.id.previewBox);
+        View pr = LayoutInflater.from(this).inflate(R.layout.overlay_panel, box, false);
+        previewRoot = pr;
+        pr.findViewById(R.id.handle).setVisibility(View.GONE);
+        pr.findViewById(R.id.card).setVisibility(View.VISIBLE);
+        pr.findViewById(R.id.btnCollapse).setVisibility(View.INVISIBLE);
+        ((BatteryView) pr.findViewById(R.id.battery)).setLevel(78, false);
+        ((TextView) pr.findViewById(R.id.tvBatt)).setText("78%");
+        ((TextView) pr.findViewById(R.id.tvTemp)).setText("36.2°C");
+        ((TextView) pr.findViewById(R.id.tvNetFocus)).setText("Fokus ke game");
+        ((TextView) pr.findViewById(R.id.tvHint)).setText("Performa stabil");
+        ((ImageView) pr.findViewById(R.id.icNetFocus)).setImageTintList(ColorStateList.valueOf(0xFF30D158));
+
+        LinearLayout r1 = pr.findViewById(R.id.gridRow1);
+        LinearLayout r2 = pr.findViewById(R.id.gridRow2);
+        View[] cells = {
+                PanelStyle.addCell(r1, "CPU", 0xFF0A84FF, 100f, 1f),
+                PanelStyle.addCell(r1, "GPU", 0xFFBF5AF2, 100f, 1f),
+                PanelStyle.addCell(r2, "RAM", 0xFF30D158, 100f, 1f),
+                PanelStyle.addCell(r2, "INTERNET", 0xFFFF9F0A, 0f, 64f)};
+        previewSparks = new SparkView[4];
+        previewVals = new TextView[4];
+        for (int i = 0; i < 4; i++) {
+            previewSparks[i] = cells[i].findViewById(R.id.cellSpark);
+            previewVals[i] = cells[i].findViewById(R.id.cellValue);
+            ((TextView) cells[i].findViewById(R.id.cellSub)).setText(i == 3 ? "unduh" : "stabil");
+        }
+        for (int i = 0; i < 12; i++) previewStep.run();   // isi awal supaya grafik langsung terlihat
+        ui.removeCallbacks(previewStep);
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        box.addView(pr, lp);
+
+        int cur = PanelStyle.opacity(this);
+        PanelStyle.apply(pr, cur);
+        final TextView val = findViewById(R.id.tvGlassVal);
+        val.setText(cur + "%");
+        SeekBar sb = findViewById(R.id.seekGlass);
+        sb.setProgress(cur);
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int p, boolean user) {
+                val.setText(p + "%");
+                PanelStyle.apply(previewRoot, p);
+                prefs.edit().putInt(PanelStyle.KEY, p).apply();
+            }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        });
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ui.removeCallbacks(previewStep);
     }
 
     @Override
@@ -71,6 +162,8 @@ public class SettingsActivity extends Activity {
         super.onResume();
         updatePermUi();
         GameService.syncWatch(this);
+        ui.removeCallbacks(previewStep);
+        ui.postDelayed(previewStep, 1300);
     }
 
     @Override

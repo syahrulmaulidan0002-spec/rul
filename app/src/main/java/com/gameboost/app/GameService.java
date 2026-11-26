@@ -715,15 +715,11 @@ public class GameService extends Service {
     }
 
     private Metric addMetric(LinearLayout row, String label, int color, float fixedMax, float autoFloor) {
-        View v = LayoutInflater.from(row.getContext()).inflate(R.layout.cell_metric, row, false);
+        View v = PanelStyle.addCell(row, label, color, fixedMax, autoFloor);
         Metric m = new Metric();
-        ((TextView) v.findViewById(R.id.cellLabel)).setText(label);
         m.value = v.findViewById(R.id.cellValue);
         m.sub = v.findViewById(R.id.cellSub);
         m.spark = v.findViewById(R.id.cellSpark);
-        m.spark.setColor(color);
-        m.spark.setFixedMax(fixedMax, autoFloor);
-        row.addView(v);
         return m;
     }
 
@@ -811,6 +807,7 @@ public class GameService extends Service {
         btnRec.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { toggleRecord(); }
         });
+        PanelStyle.apply(root, PanelStyle.opacity(this));
         updateRecUi();
 
         card.setVisibility(View.GONE);
@@ -1071,7 +1068,8 @@ public class GameService extends Service {
 
     private void updateRecUi() {
         if (btnRec == null) return;
-        btnRec.setBackgroundResource(recording ? R.drawable.bg_glass_btn_rec : R.drawable.bg_glass_btn);
+        btnRec.setTag(recording);
+        btnRec.setBackground(PanelStyle.recButton(this, recording, PanelStyle.opacity(this)));
         icRec.setImageResource(recording ? R.drawable.ic_stop_sq : R.drawable.ic_record);
         if (!recording) tvRec.setText("Rekam");
     }

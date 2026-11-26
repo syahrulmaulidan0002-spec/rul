@@ -34,13 +34,13 @@
             android:singleLine="true"
             android:text="—"
             android:textColor="@color/text"
-            android:textSize="14sp" />
+            android:textSize="15sp" />
     </LinearLayout>
 
     <com.gameboost.app.SparkView
         android:id="@+id/cellSpark"
         android:layout_width="match_parent"
-        android:layout_height="30dp"
+        android:layout_height="38dp"
         android:layout_marginTop="6dp" />
 
     <TextView
