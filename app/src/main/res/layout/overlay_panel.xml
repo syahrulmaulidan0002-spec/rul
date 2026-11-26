@@ -45,7 +45,7 @@
         android:padding="12dp"
         android:visibility="gone">
 
-        <!-- Judul + ikon baterai -->
+        <!-- Judul + baterai + tutup -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -66,7 +66,7 @@
                 android:layout_weight="1"
                 android:fontFamily="sans-serif-medium"
                 android:text="GameBoost"
-                android:textColor="@color/muted"
+                android:textColor="#F2FFFFFF"
                 android:textSize="13sp" />
 
             <com.gameboost.app.BatteryView
@@ -82,7 +82,7 @@
                 android:layout_marginEnd="8dp"
                 android:fontFamily="sans-serif-medium"
                 android:text="--"
-                android:textColor="@color/text"
+                android:textColor="#FFFFFFFF"
                 android:textSize="12sp" />
 
             <FrameLayout
@@ -122,86 +122,99 @@
             android:layout_marginEnd="-3dp"
             android:orientation="horizontal" />
 
-        <!-- Status internet: fokus ke game / Wi-Fi latensi rendah -->
+        <!-- Dua pil status: internet dan suhu -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:background="@drawable/bg_metric_cell"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="10dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="8dp">
-
-            <ImageView
-                android:id="@+id/icNetFocus"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_wifi"
-                android:tint="@color/muted" />
-
-            <TextView
-                android:id="@+id/tvNetFocus"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <!-- Suhu + saran singkat -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_thermo"
-                android:tint="@color/warn" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_metric_cell"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="8dp">
 
-            <TextView
-                android:id="@+id/tvTemp"
+                <ImageView
+                    android:id="@+id/icNetFocus"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_wifi"
+                    android:tint="#B8FFFFFF" />
+
+                <TextView
+                    android:id="@+id/tvNetFocus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="#B8FFFFFF"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
-                android:text="--"
-                android:textColor="@color/text"
-                android:textSize="12sp" />
+                android:background="@drawable/bg_metric_cell"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="8dp">
 
-            <TextView
-                android:id="@+id/tvHint"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:gravity="end"
-                android:singleLine="true"
-                android:text="Performa stabil"
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
+                <ImageView
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_thermo"
+                    android:tint="@color/warn" />
+
+                <TextView
+                    android:id="@+id/tvTemp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="--"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="Performa stabil"
+            android:textColor="#B8FFFFFF"
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/tvToast"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
             android:layout_marginTop="4dp"
             android:textColor="@color/ok"
             android:textSize="12sp"
             android:visibility="gone" />
 
+        <!-- Aksi: screenshot, rekam, bersihkan, selesai -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -209,59 +222,120 @@
             android:orientation="horizontal">
 
             <LinearLayout
-                android:id="@+id/btnClean"
+                android:id="@+id/btnShot"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
+                android:layout_height="54dp"
+                android:layout_marginStart="0dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_btn_tint_blue"
+                android:background="@drawable/bg_glass_btn"
                 android:clickable="true"
                 android:gravity="center"
-                android:orientation="horizontal">
+                android:orientation="vertical">
 
                 <ImageView
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
+                    
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_camera"
+                    android:tint="#FFFFFF" />
+
+                <TextView
+                    android:id="@+id/tvShot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Foto"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="10sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/btnRec"
+                android:layout_width="0dp"
+                android:layout_height="54dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_glass_btn"
+                android:clickable="true"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/icRec"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_record"
+                    android:tint="#FF453A" />
+
+                <TextView
+                    android:id="@+id/tvRec"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Rekam"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="10sp" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/btnClean"
+                android:layout_width="0dp"
+                android:layout_height="54dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_glass_btn"
+                android:clickable="true"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_sparkle"
-                    android:tint="@color/accent" />
+                    android:tint="#64D2FF" />
 
                 <TextView
                     android:id="@+id/tvClean"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginTop="3dp"
                     android:fontFamily="sans-serif-medium"
                     android:text="Bersihkan"
-                    android:textColor="@color/accent"
-                    android:textSize="14sp" />
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="10sp" />
             </LinearLayout>
-
             <LinearLayout
                 android:id="@+id/btnStop"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="54dp"
+                android:layout_marginStart="6dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_btn_tint_red"
+                android:background="@drawable/bg_glass_btn"
                 android:clickable="true"
                 android:gravity="center"
-                android:orientation="horizontal">
+                android:orientation="vertical">
 
                 <ImageView
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
+                    
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_xmark"
-                    android:tint="@color/danger" />
+                    android:tint="#FF453A" />
 
                 <TextView
+                    android:id="@+id/tvStop"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginTop="3dp"
                     android:fontFamily="sans-serif-medium"
                     android:text="Selesai"
-                    android:textColor="@color/danger"
-                    android:textSize="14sp" />
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="10sp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

@@ -69,6 +69,7 @@ public class GameService extends Service {
     private static final int NOTIF_ID = 7;
     private static final int NOTIF_SUMMARY_ID = 8;
     private static final int NOTIF_BREAK_ID = 9;
+    private static final int NOTIF_SHOT_ID = 10;   // 10 = screenshot, 11 = rekaman
     private static final int CARD_W_DP = 300;
     private static final long AUTO_HIDE_MS = 12000;
     private static final long FIRST_HIDE_MS = 6000;
@@ -101,6 +102,19 @@ public class GameService extends Service {
     private boolean expanded = false;
     private boolean onRight = true;
     private boolean cleaning = false;
+    private boolean recording = false, shooting = false, recBusy = false;
+    private long recStart;
+    private TextView tvRec;
+    private ImageView icRec;
+    private View btnRec;
+    private final Runnable recTick = new Runnable() {
+        @Override public void run() {
+            if (!recording) return;
+            long sec = (System.currentTimeMillis() - recStart) / 1000;
+            if (tvRec != null) tvRec.setText(String.format(Locale.US, "%02d:%02d", sec / 60, sec % 60));
+            handler.postDelayed(this, 1000);
+        }
+    };
     private int slop;
     private String gamePkg = "";
     private String netType = "";
@@ -341,6 +355,13 @@ public class GameService extends Service {
         handler.removeCallbacks(watchdog);
         handler.removeCallbacks(breakTask);
         stopSampling();
+        if (recording) {
+            recording = false;
+            handler.removeCallbacks(recTick);
+            new Thread(new Runnable() {
+                @Override public void run() { ScreenCapture.stopRecord(); }
+            }).start();
+        }
         if (wifiLock != null) {
             try {
                 if (wifiLock.isHeld()) wifiLock.release();
@@ -725,6 +746,9 @@ public class GameService extends Service {
         tvToast = root.findViewById(R.id.tvToast);
         tvClean = root.findViewById(R.id.tvClean);
         btnClean = root.findViewById(R.id.btnClean);
+        btnRec = root.findViewById(R.id.btnRec);
+        tvRec = root.findViewById(R.id.tvRec);
+        icRec = root.findViewById(R.id.icRec);
         slop = ViewConfiguration.get(this).getScaledTouchSlop();
         onRight = !Prefs.flag(this, "panel_left");
 
@@ -781,6 +805,13 @@ public class GameService extends Service {
         btnClean.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { cleanNow(); }
         });
+        root.findViewById(R.id.btnShot).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { takeShot(); }
+        });
+        btnRec.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { toggleRecord(); }
+        });
+        updateRecUi();
 
         card.setVisibility(View.GONE);
         handle.setVisibility(View.VISIBLE);
@@ -1032,6 +1063,100 @@ public class GameService extends Service {
                         flashToast(String.format(Locale.US, "✓ RAM +%d MB  •  %d aplikasi dihentikan",
                                 r.freedMb, r.requested));
                         if (expanded) scheduleAutoHide(AUTO_HIDE_MS);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void updateRecUi() {
+        if (btnRec == null) return;
+        btnRec.setBackgroundResource(recording ? R.drawable.bg_glass_btn_rec : R.drawable.bg_glass_btn);
+        icRec.setImageResource(recording ? R.drawable.ic_stop_sq : R.drawable.ic_record);
+        if (!recording) tvRec.setText("Rekam");
+    }
+
+    /** Screenshot: panel disembunyikan sebentar supaya tidak ikut terfoto. */
+    private void takeShot() {
+        if (shooting) return;
+        if (!ShizukuHelper.ready()) {
+            flashToast("Butuh Shizuku aktif");
+            return;
+        }
+        shooting = true;
+        handler.removeCallbacks(autoHide);
+        closePanel();
+        final View r = root;
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (r != null) r.setVisibility(View.INVISIBLE);
+                new Thread(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            Thread.sleep(250);
+                        } catch (InterruptedException ignored) {
+                        }
+                        final String path = ScreenCapture.screenshot();
+                        handler.post(new Runnable() {
+                            @Override public void run() {
+                                shooting = false;
+                                if (root != null) root.setVisibility(View.VISIBLE);
+                                if (path != null) {
+                                    vibrate(25);
+                                    postSimpleNotification(NOTIF_SHOT_ID, "Screenshot tersimpan",
+                                            "Folder Pictures/GameBoost");
+                                } else {
+                                    openPanel(AUTO_HIDE_MS);
+                                    flashToast("Screenshot gagal");
+                                }
+                            }
+                        });
+                    }
+                }).start();
+            }
+        }, 330);
+    }
+
+    private void toggleRecord() {
+        if (!ShizukuHelper.ready()) {
+            flashToast("Butuh Shizuku aktif");
+            return;
+        }
+        if (recBusy) return;
+        recBusy = true;
+        final boolean start = !recording;
+        final int[] sz = screen();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final boolean ok;
+                final String name;
+                if (start) {
+                    ok = ScreenCapture.startRecord(sz[0], sz[1]);
+                    name = null;
+                } else {
+                    name = ScreenCapture.stopRecord();
+                    ok = true;
+                }
+                handler.post(new Runnable() {
+                    @Override public void run() {
+                        recBusy = false;
+                        if (start) {
+                            recording = ok;
+                            if (ok) {
+                                recStart = System.currentTimeMillis();
+                                handler.post(recTick);
+                                flashToast("● Merekam…");
+                            } else {
+                                flashToast("Rekam gagal dimulai");
+                            }
+                        } else {
+                            recording = false;
+                            handler.removeCallbacks(recTick);
+                            if (name != null) postSimpleNotification(NOTIF_SHOT_ID + 1,
+                                    "Rekaman tersimpan", "Folder Movies/GameBoost");
+                            flashToast(name != null ? "✓ Rekaman tersimpan" : "Rekaman tidak ditemukan");
+                        }
+                        updateRecUi();
                     }
                 });
             }
