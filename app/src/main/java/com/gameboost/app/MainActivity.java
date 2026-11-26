@@ -495,8 +495,10 @@ public class MainActivity extends Activity {
 
     private void updateRestore() {
         int n = GameBooster.pendingCount(this);
-        cardRestore.setVisibility(n > 0 ? View.VISIBLE : View.GONE);
-        if (n > 0) tvRestore.setText("Pulihkan semua aplikasi (" + n + ")");
+        // Selama mode game aktif, aplikasi memang sedang dibekukan: jangan tawarkan pemulihan.
+        boolean show = n > 0 && !GameService.running;
+        cardRestore.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) tvRestore.setText("Pulihkan semua aplikasi (" + n + ")");
     }
 
     private void restoreAll() {

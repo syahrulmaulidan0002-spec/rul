@@ -38,7 +38,8 @@ final class ScreenCapture {
         float k = Math.min(1f, 1280f / Math.max(screenW, screenH));
         int w = Math.max(2, Math.round(screenW * k) & ~1);
         int h = Math.max(2, Math.round(screenH * k) & ~1);
-        String loop = "while [ ! -e " + STOP_FILE + " ]; do screenrecord --bit-rate 6000000 --size "
+        // Maksimal 20 file x 3 menit = 1 jam, supaya tidak merekam tanpa henti bila aplikasi mati.
+        String loop = "i=0; while [ ! -e " + STOP_FILE + " ] && [ $i -lt 20 ]; do i=$((i+1)); screenrecord --bit-rate 6000000 --size "
                 + w + "x" + h + " --time-limit 180 " + VID_DIR + "/GB_$(date +%Y%m%d_%H%M%S).mp4 || break; done";
         String out = ShizukuHelper.exec("rm -f " + STOP_FILE + "; mkdir -p " + VID_DIR
                 + "; (sh -c '" + loop + "' >/dev/null 2>&1 &); sleep 1; "

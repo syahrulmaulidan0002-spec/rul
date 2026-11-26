@@ -66,6 +66,7 @@ public class GameService extends Service {
     private static final String CHANNEL = "gameboost_mode";
     private static final String CHANNEL_WATCH = "gameboost_watch";
     private static final String CHANNEL_SUMMARY = "gameboost_summary";
+    private static final String CHANNEL_CAPTURE = "gameboost_capture";
     private static final int NOTIF_ID = 7;
     private static final int NOTIF_SUMMARY_ID = 8;
     private static final int NOTIF_BREAK_ID = 9;
@@ -507,7 +508,8 @@ public class GameService extends Service {
                 handler.post(new Runnable() {
                     @Override public void run() {
                         starting = false;
-                        if (done != null && !running && watching) beginGame(done, true);
+                        if (done == null) suppressPkg = pkg;      // gagal: jangan dicoba terus tiap 2 detik
+                        else if (!running && watching) beginGame(done, true);
                     }
                 });
             }
@@ -663,11 +665,25 @@ public class GameService extends Service {
     /** Notifikasi biasa (ringkasan sesi, pengingat istirahat). */
     @SuppressWarnings("deprecation")
     private void postSimpleNotification(int id, String title, String text) {
+        postNotification(id, title, text, false);
+    }
+
+    /** Notifikasi tanpa suara dan tanpa pop-up (hasil foto/rekam saat sedang main). */
+    private void postQuietNotification(int id, String title, String text) {
+        postNotification(id, title, text, true);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void postNotification(int id, String title, String text, boolean quiet) {
         try {
+            String channel = quiet ? CHANNEL_CAPTURE : CHANNEL_SUMMARY;
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (Build.VERSION.SDK_INT >= 26) {
-                NotificationChannel ch = new NotificationChannel(CHANNEL_SUMMARY, "Ringkasan sesi",
-                        NotificationManager.IMPORTANCE_DEFAULT);
+                NotificationChannel ch = quiet
+                        ? new NotificationChannel(CHANNEL_CAPTURE, "Hasil foto dan rekam",
+                                NotificationManager.IMPORTANCE_LOW)
+                        : new NotificationChannel(CHANNEL_SUMMARY, "Ringkasan sesi",
+                                NotificationManager.IMPORTANCE_DEFAULT);
                 nm.createNotificationChannel(ch);
             }
             if (Build.VERSION.SDK_INT >= 33 && !PermHelper.hasNotifPerm(this)) return;
@@ -676,7 +692,7 @@ public class GameService extends Service {
             PendingIntent open = PendingIntent.getActivity(this, 2,
                     new Intent(this, MainActivity.class), piFlags);
             Notification.Builder b = Build.VERSION.SDK_INT >= 26
-                    ? new Notification.Builder(this, CHANNEL_SUMMARY)
+                    ? new Notification.Builder(this, channel)
                     : new Notification.Builder(this);
             b.setSmallIcon(R.drawable.ic_stat)
                     .setContentTitle(title)
@@ -1105,8 +1121,10 @@ public class GameService extends Service {
                                 if (root != null) root.setVisibility(View.VISIBLE);
                                 if (path != null) {
                                     vibrate(25);
-                                    postSimpleNotification(NOTIF_SHOT_ID, "Screenshot tersimpan",
+                                    postQuietNotification(NOTIF_SHOT_ID, "Screenshot tersimpan",
                                             "Folder Pictures/GameBoost");
+                                    android.widget.Toast.makeText(GameService.this,
+                                            "Screenshot tersimpan", android.widget.Toast.LENGTH_SHORT).show();
                                 } else {
                                     openPanel(AUTO_HIDE_MS);
                                     flashToast("Screenshot gagal");
@@ -1144,7 +1162,12 @@ public class GameService extends Service {
                         recBusy = false;
                         if (start) {
                             recording = ok;
-                            if (ok) {
+                            if (ok && !running) {              // sesi sudah selesai selagi rekaman dimulai
+                                recording = false;
+                                new Thread(new Runnable() {
+                                    @Override public void run() { ScreenCapture.stopRecord(); }
+                                }).start();
+                            } else if (ok) {
                                 recStart = System.currentTimeMillis();
                                 handler.post(recTick);
                                 toastIcon("Merekam…", R.drawable.ic_record, R.color.danger);
@@ -1154,7 +1177,7 @@ public class GameService extends Service {
                         } else {
                             recording = false;
                             handler.removeCallbacks(recTick);
-                            if (name != null) postSimpleNotification(NOTIF_SHOT_ID + 1,
+                            if (name != null) postQuietNotification(NOTIF_SHOT_ID + 1,
                                     "Rekaman tersimpan", "Folder Movies/GameBoost");
                             if (name != null) toastIcon("Rekaman tersimpan", R.drawable.ic_check, R.color.ok);
                             else flashToast("Rekaman tidak ditemukan");

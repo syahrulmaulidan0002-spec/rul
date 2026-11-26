@@ -13,7 +13,8 @@ final class GameDetect {
 
     private static final String[] HINTS = {
             "legends", "freefire", "pubg", "codm", "callofduty", "genshin", "supercell",
-            "roblox", "minecraft", "garena", "tencent", "mobilelegends", "honkai", "efootball"
+            "roblox", "minecraft", "garena.game", "dts.freefire", "tencent.ig", "tencent.tmgp",
+            "mobilelegends", "honkai", "efootball"
     };
 
     private GameDetect() {}

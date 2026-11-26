@@ -53,13 +53,22 @@ public class GameNotifService extends NotificationListenerService {
         if (sbn == null || !shouldBlock()) return;
         if (getPackageName().equals(sbn.getPackageName())) return;
         Notification n = sbn.getNotification();
-        boolean ongoing = n != null && (n.flags & Notification.FLAG_ONGOING_EVENT) != 0;
+        if (isEssential(n)) return;                    // telepon, alarm, dan notifikasi berjalan tetap tampil
         boolean summary = n != null && (n.flags & Notification.FLAG_GROUP_SUMMARY) != 0;
-        if (!ongoing && !summary) countMissed(sbn.getPackageName());
+        if (!summary) countMissed(sbn.getPackageName());
         try {
             cancelNotification(sbn.getKey());
         } catch (Exception ignored) {
         }
+    }
+
+    /** Panggilan, alarm, dan notifikasi "sedang berjalan" (musik, navigasi) tidak boleh dihapus. */
+    private static boolean isEssential(Notification n) {
+        if (n == null) return false;
+        if ((n.flags & Notification.FLAG_ONGOING_EVENT) != 0) return true;
+        String c = n.category;
+        return Notification.CATEGORY_CALL.equals(c) || Notification.CATEGORY_ALARM.equals(c)
+                || Notification.CATEGORY_NAVIGATION.equals(c);
     }
 
     private static boolean shouldBlock() {
@@ -74,7 +83,7 @@ public class GameNotifService extends NotificationListenerService {
             StatusBarNotification[] all = s.getActiveNotifications();
             if (all == null) return;
             for (StatusBarNotification n : all) {
-                if (!s.getPackageName().equals(n.getPackageName())) {
+                if (!s.getPackageName().equals(n.getPackageName()) && !isEssential(n.getNotification())) {
                     s.cancelNotification(n.getKey());
                 }
             }

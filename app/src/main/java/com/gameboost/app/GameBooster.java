@@ -70,7 +70,7 @@ final class GameBooster {
     // ---------------------------------------------------------------- tutup / bekukan
 
     /** Pembersihan penuh + ukur RAM. Jalankan di thread background (ada jeda ~0,8 detik). */
-    static Result boost(Context ctx, String gamePkg, boolean freeze) {
+    static synchronized Result boost(Context ctx, String gamePkg, boolean freeze) {
         Context app = ctx.getApplicationContext();
         ActivityManager am = (ActivityManager) app.getSystemService(Context.ACTIVITY_SERVICE);
         Set<String> targets = targets(app, gamePkg);
@@ -326,7 +326,10 @@ final class GameBooster {
 
         String out = ShizukuHelper.exec(sb.toString());
         if (out == null) return -1;
-        sp.edit().remove(KEY_SUSPENDED).putBoolean(KEY_PERF_ACTIVE, false)
+        // Hanya hapus yang barusan dipulihkan; catatan baru dari sesi lain tidak boleh ikut hilang.
+        Set<String> left = new HashSet<>(sp.getStringSet(KEY_SUSPENDED, Collections.<String>emptySet()));
+        left.removeAll(frozen);
+        sp.edit().putStringSet(KEY_SUSPENDED, left).putBoolean(KEY_PERF_ACTIVE, false)
                 .putBoolean(KEY_RR_CHANGED, false)
                 .putBoolean(KEY_NET_ACTIVE, false).apply();
         return frozen.size();
