@@ -15,8 +15,8 @@ import android.widget.TextView;
 /** Gaya "liquid glass" panel mengambang, dipakai panel asli dan simulasi di Pengaturan. */
 final class PanelStyle {
 
-    static final String KEY = "glass";
-    static final int DEFAULT = 45;          // 0 = paling bening, 100 = paling pekat
+    static final String KEY = "glass2";   // kunci baru: semua pengguna mulai dari nilai bawaan yang lebih pekat
+    static final int DEFAULT = 72;          // 0 = paling bening, 100 = paling pekat
 
     private PanelStyle() {}
 
@@ -58,7 +58,7 @@ final class PanelStyle {
         if (card != null) {
             int padL = card.getPaddingLeft(), padT = card.getPaddingTop();
             int padR = card.getPaddingRight(), padB = card.getPaddingBottom();
-            card.setBackground(new GlassDrawable(c, 30, 0x0B0E18, 0.07f + 0.78f * a, 1f));
+            card.setBackground(new GlassDrawable(c, 30, 0x0B0E18, 0.34f + 0.54f * a, 1f));
             card.setPadding(padL, padT, padR, padB);
         }
         int[] rows = {R.id.gridRow1, R.id.gridRow2};
