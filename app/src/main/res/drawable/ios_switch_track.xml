@@ -3,14 +3,14 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_checked="true">
         <shape android:shape="rectangle">
-            <solid android:color="#30D158" />
+            <gradient android:angle="0" android:startColor="#30D158" android:endColor="#28B14C" />
             <corners android:radius="16dp" />
             <size android:width="51dp" android:height="31dp" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#39393D" />
+            <solid android:color="#5C5C60" />
             <corners android:radius="16dp" />
             <size android:width="51dp" android:height="31dp" />
         </shape>

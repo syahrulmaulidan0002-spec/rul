@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Kartu kaca: gradasi putih tipis, tepi tipis berkilau. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/card" />
-    <corners android:radius="14dp" />
+    <gradient android:angle="270" android:startColor="#1AFFFFFF" android:endColor="#0AFFFFFF" />
+    <corners android:radius="22dp" />
+    <stroke android:width="0.5dp" android:color="#24FFFFFF" />
 </shape>
