@@ -1078,12 +1078,21 @@ public class GameService extends Service {
 
         int fps = lastFps;
         if (tvFps != null) {
-            tvFps.setText(fps >= 0 ? fps + " FPS" : "— FPS");
+            tvFps.setText(fps >= 0 ? fps + " FPS" : fpsReason(fps));
             tvFps.setTextColor(fps < 0 ? 0xB8FFFFFF : fps >= 55 ? 0xFF30D158 : fps >= 30 ? 0xFFFF9F0A : 0xFFFF453A);
         }
 
         // RAM ikut dicatat di siklus yang sama supaya keempat grafik sinkron.
         metrics[M_RAM].spark.push(SysInfo.ram(this).usedPct);
+    }
+
+    private static String fpsReason(int code) {
+        switch (code) {
+            case FpsMeter.ERR_SHIZUKU: return "FPS: butuh Shizuku";
+            case FpsMeter.ERR_NOGAME: return "FPS: game belum dikenali";
+            case FpsMeter.ERR_NOLAYER: return "FPS: layar game tak ketemu";
+            default: return "FPS: tak terbaca";
+        }
     }
 
     private void cleanNow() {
@@ -1171,7 +1180,9 @@ public class GameService extends Service {
             handler.post(recTick);
             vibrate(25);
             updateRecUi();
-            if (!withAudio) flashToast("Merekam tanpa suara (izin suara tidak diberikan)");
+            android.content.SharedPreferences rp = Prefs.get(GameService.this);
+            if (!withAudio && (rp.getBoolean(RecordService.PREF_GAME, true) || rp.getBoolean(RecordService.PREF_MIC, false)))
+                flashToast("Merekam tanpa suara (izin suara ditolak atau tidak bisa)");
         }
 
         @Override public void onStopped(boolean saved, String message) {

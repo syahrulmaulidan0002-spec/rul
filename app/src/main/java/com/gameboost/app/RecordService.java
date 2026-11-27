@@ -50,10 +50,13 @@ public class RecordService extends Service {
     static final String ACTION_STOP = "gb.rec.stop";
     static final String EX_CODE = "code";
     static final String EX_DATA = "data";
-    static final String EX_AUDIO = "audio";
+    static final String EX_GAME = "game";
+    static final String EX_MIC = "mic";
+    static final String PREF_GAME = "rec_game";
+    static final String PREF_MIC = "rec_mic";
     static final String PREF_RES = "rec_res";
     static final int[] RES = {360, 480, 720, 1080, 1440};
-    static final String[] RES_LABEL = {"360p", "480p", "720p", "1080p", "1440p (2K)"};
+    static final String[] RES_LABEL = {"360p", "480p", "720p HD", "1080p Full HD", "1440p (2K)"};
     static final int DEFAULT_RES = 720;
 
     private static final String CHANNEL = "gameboost_rec";
@@ -92,7 +95,7 @@ public class RecordService extends Service {
     private MediaProjection projection;
     private VirtualDisplay display;
     private MediaCodec vEnc, aEnc;
-    private AudioRecord aRec;
+    private AudioRecord aRec, mRec;
     private MediaMuxer muxer;
     private ParcelFileDescriptor pfd;
     private Uri outUri;
@@ -120,14 +123,15 @@ public class RecordService extends Service {
             return START_NOT_STICKY;
         }
         if (active) return START_NOT_STICKY;
-        showForeground();
+        final boolean wantGame = intent.getBooleanExtra(EX_GAME, false);
+        final boolean wantMic = intent.getBooleanExtra(EX_MIC, false);
+        showForeground(wantMic);
         final int code = intent.getIntExtra(EX_CODE, 0);
         final Intent data = intent.getParcelableExtra(EX_DATA);
-        final boolean wantAudio = intent.getBooleanExtra(EX_AUDIO, false);
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
-                    begin(code, data, wantAudio);
+                    begin(code, data, wantGame, wantMic);
                 } catch (Throwable t) {
                     abort("Rekam gagal: " + (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
                 }
@@ -137,7 +141,7 @@ public class RecordService extends Service {
     }
 
     @SuppressWarnings("deprecation")
-    private void showForeground() {
+    private void showForeground(boolean mic) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Rekam layar",
@@ -152,7 +156,9 @@ public class RecordService extends Service {
                 .setContentText("Ketuk untuk berhenti").setContentIntent(stop).setOngoing(true);
         Notification n = b.build();
         if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+            int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
+            if (mic && Build.VERSION.SDK_INT >= 30) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+            startForeground(NOTIF_ID, n, type);
         } else {
             startForeground(NOTIF_ID, n);
         }
@@ -160,7 +166,7 @@ public class RecordService extends Service {
 
     // ------------------------------------------------------------------------------ mulai
 
-    private void begin(int code, Intent data, boolean wantAudio) throws Exception {
+    private void begin(int code, Intent data, boolean wantGame, boolean wantMic) throws Exception {
         MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
         projection = mpm.getMediaProjection(code, data);
         if (projection == null) throw new IllegalStateException("izin ditolak");
@@ -176,7 +182,7 @@ public class RecordService extends Service {
         float k = Math.min(1f, target / (float) Math.min(dm.widthPixels, dm.heightPixels));
         int w = Math.max(2, Math.round(dm.widthPixels * k) & ~1);
         int h = Math.max(2, Math.round(dm.heightPixels * k) & ~1);
-        int bitrate = (int) Math.max(1_500_000L, Math.min(20_000_000L, (long) (w * (long) h * FPS * 0.14)));
+        int bitrate = (int) Math.max(1_500_000L, Math.min(30_000_000L, (long) (w * (long) h * FPS * 0.2)));
 
         MediaFormat vf = MediaFormat.createVideoFormat("video/avc", w, h);
         vf.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
@@ -184,6 +190,12 @@ public class RecordService extends Service {
         vf.setInteger(MediaFormat.KEY_FRAME_RATE, FPS);
         vf.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
         vf.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L);
+        // Warna sesuai standar layar HP (BT.709) supaya tidak pucat saat diputar.
+        if (Build.VERSION.SDK_INT >= 24) {
+            vf.setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709);
+            vf.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
+            vf.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
+        }
         vEnc = MediaCodec.createEncoderByType("video/avc");
         vEnc.configure(vf, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         Surface in = vEnc.createInputSurface();
@@ -191,23 +203,40 @@ public class RecordService extends Service {
         display = projection.createVirtualDisplay("GameBoost", w, h, dm.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, in, null, null);
 
-        // Suara game (Android 10+). Gagal = tetap merekam tanpa suara.
-        if (wantAudio && Build.VERSION.SDK_INT >= 29) {
+        // Suara: suara game (Android 10+) dan/atau mikrofon. Gagal = tetap merekam tanpa itu.
+        AudioFormat af = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_IN_STEREO).build();
+        int buf = Math.max(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT) * 2, 16384);
+        if (wantGame && Build.VERSION.SDK_INT >= 29) {
             try {
                 AudioPlaybackCaptureConfiguration cfg = new AudioPlaybackCaptureConfiguration.Builder(projection)
                         .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                         .addMatchingUsage(AudioAttributes.USAGE_GAME)
                         .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).build();
-                AudioFormat af = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_IN_STEREO).build();
-                int buf = Math.max(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_STEREO,
-                        AudioFormat.ENCODING_PCM_16BIT) * 2, 16384);
                 aRec = new AudioRecord.Builder().setAudioFormat(af).setBufferSizeInBytes(buf)
                         .setAudioPlaybackCaptureConfig(cfg).build();
                 if (aRec.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("audio");
+            } catch (Throwable t) {
+                try { if (aRec != null) aRec.release(); } catch (Throwable ignored) { }
+                aRec = null;
+            }
+        }
+        if (wantMic) {
+            try {
+                mRec = new AudioRecord(android.media.MediaRecorder.AudioSource.MIC, RATE,
+                        AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, buf);
+                if (mRec.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("mic");
+            } catch (Throwable t) {
+                try { if (mRec != null) mRec.release(); } catch (Throwable ignored) { }
+                mRec = null;
+            }
+        }
+        if (aRec != null || mRec != null) {
+            try {
                 MediaFormat afmt = MediaFormat.createAudioFormat("audio/mp4a-latm", RATE, 2);
                 afmt.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
-                afmt.setInteger(MediaFormat.KEY_BIT_RATE, 128_000);
+                afmt.setInteger(MediaFormat.KEY_BIT_RATE, 160_000);
                 afmt.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384);
                 aEnc = MediaCodec.createEncoderByType("audio/mp4a-latm");
                 aEnc.configure(afmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -215,9 +244,11 @@ public class RecordService extends Service {
                 hasAudio = true;
             } catch (Throwable t) {
                 hasAudio = false;
-                try { if (aRec != null) aRec.release(); } catch (Throwable ignored) { }
                 try { if (aEnc != null) aEnc.release(); } catch (Throwable ignored) { }
+                try { if (aRec != null) aRec.release(); } catch (Throwable ignored) { }
+                try { if (mRec != null) mRec.release(); } catch (Throwable ignored) { }
                 aRec = null;
+                mRec = null;
                 aEnc = null;
             }
         }
@@ -315,21 +346,41 @@ public class RecordService extends Service {
         }
     }
 
+    private static final float MIC_GAIN = 1.4f;
+
     private void audioLoop() {
-        byte[] pcm = new byte[4096];
+        byte[] g = new byte[4096];
+        byte[] m = new byte[4096];
         long frames = 0;
         long baseUs = -1;
         try {
-            aRec.startRecording();
+            if (aRec != null) aRec.startRecording();
+            if (mRec != null) mRec.startRecording();
             while (!stopFlag) {
-                int n = aRec.read(pcm, 0, pcm.length);
+                int ng = 0, nm = 0;
+                if (aRec != null) ng = Math.max(0, aRec.read(g, 0, g.length));
+                if (mRec != null) nm = Math.max(0, mRec.read(m, 0, m.length));
+                int n = Math.max(ng, nm);
                 if (n <= 0) continue;
+                n &= ~3;
+                if (n <= 0) continue;
+                // Campur suara game dan mikrofon (jumlahkan, dibatasi supaya tidak pecah).
+                for (int i = 0; i + 1 < n; i += 2) {
+                    int sg = i + 1 < ng ? (short) ((g[i] & 0xFF) | (g[i + 1] << 8)) : 0;
+                    int sm = i + 1 < nm ? (short) ((m[i] & 0xFF) | (m[i + 1] << 8)) : 0;
+                    int mixed = aRec != null && mRec != null ? sg + Math.round(sm * MIC_GAIN)
+                            : (aRec != null ? sg : Math.round(sm * MIC_GAIN));
+                    if (mixed > 32767) mixed = 32767;
+                    if (mixed < -32768) mixed = -32768;
+                    g[i] = (byte) (mixed & 0xFF);
+                    g[i + 1] = (byte) ((mixed >> 8) & 0xFF);
+                }
                 if (baseUs < 0) baseUs = System.nanoTime() / 1000L - originUs - (n / 4L) * 1_000_000L / RATE;
                 int idx = aEnc.dequeueInputBuffer(10_000);
                 if (idx >= 0) {
                     ByteBuffer ib = aEnc.getInputBuffer(idx);
                     ib.clear();
-                    ib.put(pcm, 0, n);
+                    ib.put(g, 0, n);
                     aEnc.queueInputBuffer(idx, 0, n, baseUs + frames * 1_000_000L / RATE, 0);
                     frames += n / 4;
                 }
@@ -344,7 +395,8 @@ public class RecordService extends Service {
         } catch (Throwable t) {
             // Suara gagal di tengah jalan: video tetap disimpan.
         } finally {
-            try { aRec.stop(); } catch (Throwable ignored) { }
+            try { if (aRec != null) aRec.stop(); } catch (Throwable ignored) { }
+            try { if (mRec != null) mRec.stop(); } catch (Throwable ignored) { }
         }
     }
 
@@ -408,6 +460,7 @@ public class RecordService extends Service {
         try { if (vEnc != null) { vEnc.stop(); vEnc.release(); } } catch (Throwable ignored) { }
         try { if (aEnc != null) { aEnc.stop(); aEnc.release(); } } catch (Throwable ignored) { }
         try { if (aRec != null) aRec.release(); } catch (Throwable ignored) { }
+        try { if (mRec != null) mRec.release(); } catch (Throwable ignored) { }
         synchronized (lock) {
             try { if (muxer != null && muxStarted) muxer.stop(); } catch (Throwable ignored) { }
             try { if (muxer != null) muxer.release(); } catch (Throwable ignored) { }

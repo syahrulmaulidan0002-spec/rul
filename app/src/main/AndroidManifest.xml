@@ -24,6 +24,7 @@
     <!-- Rekam layar dengan suara game -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Agar GameBoost tidak ikut dimatikan oleh hemat baterai -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Membaca daftar game/aplikasi terpasang (Android 11+) -->
@@ -119,7 +120,7 @@
         <service
             android:name=".RecordService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="mediaProjection|microphone" />
 
         <activity
             android:name=".RecordPermActivity"

@@ -70,6 +70,9 @@ public class SettingsActivity extends Activity {
 
         buildPermRows((LinearLayout) findViewById(R.id.permList));
         buildSwitchRows((LinearLayout) findViewById(R.id.switchList));
+        LinearLayout rec = findViewById(R.id.recSwitchList);
+        addSwitch(rec, "Rekam suara game", R.drawable.ic_sparkle, 0xFF0A84FF, RecordService.PREF_GAME);
+        addSwitch(rec, "Rekam suara mikrofon (untuk konten)", R.drawable.ic_mic, 0xFFFF453A, RecordService.PREF_MIC);
         buildPreview();
         buildSaturation();
         buildRecordQuality();
@@ -124,25 +127,17 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildSaturation() {
-        final View before = findViewById(R.id.satBefore);
-        final View after = findViewById(R.id.satAfter);
-        int[] cols = {0xFFB4574F, 0xFFC99A3E, 0xFF6C9E57, 0xFF4B86AD, 0xFF8467AC};
-        android.graphics.drawable.GradientDrawable g1 = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, cols);
-        android.graphics.drawable.GradientDrawable g2 = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, cols);
-        g1.setCornerRadius(10f * getResources().getDisplayMetrics().density);
-        g2.setCornerRadius(10f * getResources().getDisplayMetrics().density);
-        before.setBackground(g1);
-        after.setBackground(g2);
+        final SatPreviewView pv = findViewById(R.id.satPreview);
         final TextView val = findViewById(R.id.tvSatVal);
         SeekBar sb = findViewById(R.id.seekSat);
         int cur = Math.max(100, Math.min(140, prefs.getInt(GameBooster.PREF_SAT, 100)));
         sb.setProgress(cur - 100);
-        applySatPreview(g2, val, cur);
+        pv.setSaturation(cur);
+        val.setText(cur <= 100 ? "Mati" : "+" + (cur - 100) + "%");
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean user) {
-                applySatPreview((android.graphics.drawable.GradientDrawable) after.getBackground(), val, 100 + p);
+                pv.setSaturation(100 + p);
+                val.setText(p <= 0 ? "Mati" : "+" + p + "%");
                 prefs.edit().putInt(GameBooster.PREF_SAT, 100 + p).apply();
             }
             @Override public void onStartTrackingTouch(SeekBar s) {}
@@ -152,13 +147,6 @@ public class SettingsActivity extends Activity {
             final boolean ok = GameBooster.resetSaturation(this);
             ui.post(() -> toast(ok ? "Warna layar dikembalikan" : "Shizuku belum siap"));
         }).start());
-    }
-
-    private void applySatPreview(android.graphics.drawable.GradientDrawable g, TextView val, int pct) {
-        android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
-        cm.setSaturation(pct / 100f);
-        g.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
-        val.setText(pct <= 100 ? "Mati" : "+" + (pct - 100) + "%");
     }
 
     private void buildPreview() {

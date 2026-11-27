@@ -14,7 +14,7 @@ final class Prefs {
 
     /** Kunci: kill, notif, dnd, overlay, freeze, deep, downscale, netfocus, perf (nyala); freeform, panel_left (mati). */
     static boolean flag(Context c, String key) {
-        boolean def = !("freeform".equals(key) || "panel_left".equals(key));
+        boolean def = !("freeform".equals(key) || "panel_left".equals(key) || "rec_mic".equals(key));
         return get(c).getBoolean(key, def);
     }
 }

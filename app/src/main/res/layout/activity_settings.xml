@@ -183,17 +183,13 @@
                         android:textSize="15sp" />
                 </LinearLayout>
 
-                <View
-                    android:id="@+id/satBefore"
+                <com.gameboost.app.SatPreviewView
+                    android:id="@+id/satPreview"
                     android:layout_width="match_parent"
-                    android:layout_height="22dp"
-                    android:layout_marginTop="10dp" />
-
-                <View
-                    android:id="@+id/satAfter"
-                    android:layout_width="match_parent"
-                    android:layout_height="22dp"
-                    android:layout_marginTop="4dp" />
+                    android:layout_height="130dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_preview_game"
+                    android:clipToOutline="true" />
 
                 <SeekBar
                     android:id="@+id/seekSat"
@@ -205,7 +201,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Batang atas = warna asli, bawah = hasilnya. Kiri = mati. Berlaku ke seluruh layar selama mode game dan dikembalikan saat selesai. Butuh Shizuku, dan sebagian HP (misalnya HyperOS) bisa menolaknya."
+                    android:text="Simulasi bergerak terus: kiri = warna asli, kanan = hasilnya. Geser slider ke kanan makin pekat; kiri = mati. Berlaku ke seluruh layar selama mode game dan dikembalikan saat selesai. Butuh Shizuku, dan sebagian HP (misalnya HyperOS) bisa menolaknya."
                     android:textColor="@color/muted"
                     android:textSize="12sp" />
 
@@ -271,10 +267,18 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="360p sampai 1440p (2K), bawaan 720p. Makin tinggi makin tajam tapi makin berat dan file makin besar; di HP lemah pakai 720p atau lebih rendah. Suara game ikut terekam (izin suara akan diminta sekali). Game yang melarang perekaman suara akan hening. Dialog izin rekam layar muncul tiap kali mulai merekam."
+                    android:text="360p sampai 1440p (2K), bawaan 720p. Makin tinggi makin tajam tapi makin berat dan file makin besar; di HP lemah pakai 720p atau lebih rendah. Pilih suara yang ikut terekam di bawah. Game yang melarang perekaman suara akan hening. Dialog izin rekam layar muncul tiap kali mulai merekam."
                     android:textColor="@color/muted"
                     android:textSize="12sp" />
             </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/recSwitchList"
+                style="@style/Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical" />
 
             <TextView
                 style="@style/Section"

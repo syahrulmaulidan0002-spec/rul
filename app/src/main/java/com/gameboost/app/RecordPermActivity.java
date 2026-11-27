@@ -13,11 +13,17 @@ public class RecordPermActivity extends Activity {
 
     private static final int REQ_AUDIO = 1;
     private static final int REQ_PROJ = 2;
-    private boolean audioOk = false;
+    private boolean wantGame, wantMic, audioOk = false;
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        wantGame = Prefs.get(this).getBoolean(RecordService.PREF_GAME, true);
+        wantMic = Prefs.get(this).getBoolean(RecordService.PREF_MIC, false);
+        if (!wantGame && !wantMic) {
+            askProjection();
+            return;
+        }
         if (Build.VERSION.SDK_INT >= 23
                 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
@@ -49,7 +55,8 @@ public class RecordPermActivity extends Activity {
         if (res == RESULT_OK && data != null) {
             Intent i = new Intent(this, RecordService.class).setAction(RecordService.ACTION_START)
                     .putExtra(RecordService.EX_CODE, res).putExtra(RecordService.EX_DATA, data)
-                    .putExtra(RecordService.EX_AUDIO, audioOk);
+                    .putExtra(RecordService.EX_GAME, wantGame && audioOk)
+                    .putExtra(RecordService.EX_MIC, wantMic && audioOk);
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
             finish();
         } else {
