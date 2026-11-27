@@ -139,6 +139,7 @@ public class RecordService extends Service {
 
     private volatile boolean starting = false;
     private volatile boolean fgOn = false;
+    private volatile boolean audioDropped = false;
 
     @Override
     public int onStartCommand(final Intent intent, int flags, int startId) {
@@ -179,7 +180,8 @@ public class RecordService extends Service {
             projection.registerCallback(projCb, new Handler(Looper.getMainLooper()));
         } catch (Throwable t) {
             projection = null;
-            stopped(false, "Izin rekam gagal");
+            stopped(false, "Izin rekam gagal: " + t.getClass().getSimpleName()
+                    + (t.getMessage() == null ? "" : " - " + t.getMessage()));
             fgOn = false;
                 stopForeground(true);
             stopSelf();
@@ -217,7 +219,7 @@ public class RecordService extends Service {
                 try {
                     begin(wantGame, wantMic);
                 } catch (Throwable t) {
-                    abort("Rekam gagal: " + (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+                    abort("Rekam gagal: " + t.getClass().getSimpleName() + (t.getMessage() == null ? "" : " - " + t.getMessage()));
                 } finally {
                     starting = false;
                 }
@@ -250,7 +252,12 @@ public class RecordService extends Service {
         if (Build.VERSION.SDK_INT >= 29) {
             int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
             if (mic && Build.VERSION.SDK_INT >= 30) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
-            startForeground(NOTIF_ID, n, type);
+            try {
+                startForeground(NOTIF_ID, n, type);
+            } catch (Throwable t) {
+                // Tipe mikrofon ditolak sistem: pakai rekam layar saja.
+                startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+            }
         } else {
             startForeground(NOTIF_ID, n);
         }
@@ -270,34 +277,74 @@ public class RecordService extends Service {
         int h = Math.max(2, Math.round(dm.heightPixels * k) & ~1);
         int bitrate = (int) Math.max(1_500_000L, Math.min(30_000_000L, (long) (w * (long) h * FPS * 0.2)));
 
-        MediaFormat vf = MediaFormat.createVideoFormat("video/avc", w, h);
-        vf.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        vf.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
-        vf.setInteger(MediaFormat.KEY_FRAME_RATE, FPS);
-        vf.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
-        vf.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L);
-        // Warna sesuai standar layar HP (BT.709) supaya tidak pucat saat diputar.
-        if (Build.VERSION.SDK_INT >= 24) {
-            vf.setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709);
-            vf.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
-            vf.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
+        // Pilih encoder perangkat keras dan sesuaikan ukuran/bitrate dengan batas encoder itu.
+        MediaCodecInfo ci = pickEncoder();
+        if (ci != null) {
+            try {
+                MediaCodecInfo.VideoCapabilities vc = ci.getCapabilitiesForType("video/avc").getVideoCapabilities();
+                int wa = Math.max(2, vc.getWidthAlignment()), ha = Math.max(2, vc.getHeightAlignment());
+                for (int g = 0; g < 14 && !vc.isSizeSupported(w, h); g++) {
+                    w = Math.round(w * 0.85f);
+                    h = Math.round(h * 0.85f);
+                    w -= w % wa;
+                    h -= h % ha;
+                }
+                w = Math.max(wa, w - w % wa);
+                h = Math.max(ha, h - h % ha);
+                bitrate = Math.max(vc.getBitrateRange().getLower(), Math.min(vc.getBitrateRange().getUpper(), bitrate));
+            } catch (Throwable ignored) {
+            }
         }
-        vf.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
-        if (Build.VERSION.SDK_INT >= 23) vf.setInteger(MediaFormat.KEY_PRIORITY, 0);   // prioritas waktu nyata
-        if (Build.VERSION.SDK_INT >= 30) vf.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
-        // Buang frame berlebih sebelum masuk encoder (game 60/90 fps -> rekam 30 fps): beban encoder turun.
-        vf.setFloat("max-fps-to-encoder", (float) FPS);
-        vEnc = hardwareEncoder();
-        // Profil High = kualitas lebih baik di bitrate yang sama. Bila encoder menolak, pakai bawaannya.
-        try {
-            MediaFormat hi = new MediaFormat(vf);
-            hi.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileHigh);
-            vEnc.configure(hi, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        } catch (Throwable t) {
-            try { vEnc.release(); } catch (Throwable ignored) { }
-            vEnc = hardwareEncoder();
-            vf.removeKey("max-fps-to-encoder");
-            vEnc.configure(vf, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+
+        // Coba dari pengaturan terlengkap sampai paling sederhana; encoder yang menolak satu kunci
+        // tidak boleh menggagalkan rekaman.
+        Throwable last = null;
+        for (int level = 0; level < 3 && vEnc == null; level++) {
+            MediaFormat vf = MediaFormat.createVideoFormat("video/avc", w, h);
+            vf.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+            vf.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+            vf.setInteger(MediaFormat.KEY_FRAME_RATE, FPS);
+            vf.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
+            if (level <= 1) {
+                vf.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L);
+                if (Build.VERSION.SDK_INT >= 24) {      // warna sesuai standar layar HP (BT.709)
+                    vf.setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709);
+                    vf.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
+                    vf.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
+                }
+                vf.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
+            }
+            if (level == 0) {
+                if (Build.VERSION.SDK_INT >= 23) vf.setInteger(MediaFormat.KEY_PRIORITY, 0);
+                if (Build.VERSION.SDK_INT >= 30) vf.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
+                vf.setFloat("max-fps-to-encoder", (float) FPS);
+                vf.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileHigh);
+            }
+            MediaCodec c = null;
+            try {
+                c = ci != null ? MediaCodec.createByCodecName(ci.getName()) : MediaCodec.createEncoderByType("video/avc");
+                c.configure(vf, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                vEnc = c;
+            } catch (Throwable t) {
+                last = t;
+                try { if (c != null) c.release(); } catch (Throwable ignored) { }
+            }
+        }
+        if (vEnc == null) {
+            // Terakhir: encoder bawaan sistem (bisa perangkat lunak) dengan pengaturan minimum.
+            MediaFormat vf = MediaFormat.createVideoFormat("video/avc", w, h);
+            vf.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+            vf.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+            vf.setInteger(MediaFormat.KEY_FRAME_RATE, FPS);
+            vf.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
+            try {
+                MediaCodec c = MediaCodec.createEncoderByType("video/avc");
+                c.configure(vf, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                vEnc = c;
+            } catch (Throwable t) {
+                throw new IllegalStateException("encoder " + w + "x" + h + ": "
+                        + (last != null ? last.getClass().getSimpleName() : t.getClass().getSimpleName()));
+            }
         }
         Surface in = vEnc.createInputSurface();
         vEnc.start();
@@ -374,6 +421,7 @@ public class RecordService extends Service {
         vTrack = -1;
         aTrack = -1;
         hasAudio = false;
+        audioDropped = false;
         muxStarted = false;
         lastV = -1;
         lastA = -1;
@@ -383,20 +431,20 @@ public class RecordService extends Service {
         outFile = null;
     }
 
-    /** Pilih encoder H.264 perangkat keras (hemat CPU). Encoder perangkat lunak dilewati. */
-    private static MediaCodec hardwareEncoder() throws Exception {
+    /** Encoder H.264 perangkat keras (hemat CPU); encoder perangkat lunak dilewati. Null bila tidak ada. */
+    private static MediaCodecInfo pickEncoder() {
         try {
             for (MediaCodecInfo ci : new android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
                 if (!ci.isEncoder()) continue;
                 String name = ci.getName();
                 if (name.startsWith("c2.android.") || name.startsWith("OMX.google.") || name.contains(".sw.")) continue;
                 for (String t : ci.getSupportedTypes()) {
-                    if (t.equalsIgnoreCase("video/avc")) return MediaCodec.createByCodecName(name);
+                    if (t.equalsIgnoreCase("video/avc")) return ci;
                 }
             }
         } catch (Throwable ignored) {
         }
-        return MediaCodec.createEncoderByType("video/avc");
+        return null;
     }
 
     private void openOutput() throws Exception {
@@ -423,6 +471,7 @@ public class RecordService extends Service {
 
     private void addTrack(boolean video, MediaFormat f) {
         synchronized (lock) {
+            if (muxStarted) return;           // muxer sudah jalan (tanpa suara): track baru diabaikan
             int t = muxer.addTrack(f);
             if (video) vTrack = t; else aTrack = t;
             if (vTrack >= 0 && (!hasAudio || aTrack >= 0) && !muxStarted) {
@@ -435,11 +484,23 @@ public class RecordService extends Service {
 
     private void write(boolean video, ByteBuffer b, MediaCodec.BufferInfo info) {
         synchronized (lock) {
-            long until = System.currentTimeMillis() + 4000;
+            long t0 = System.currentTimeMillis();
+            long until = t0 + 4000;
             while (!muxStarted && !stopFlag && System.currentTimeMillis() < until) {
                 try { lock.wait(50); } catch (InterruptedException e) { return; }
+                // Suara tak kunjung siap (mis. game memblokir perekaman suara): mulai tanpa suara
+                // daripada menunggu terus lalu menyimpan rekaman kosong.
+                if (!muxStarted && vTrack >= 0 && hasAudio && aTrack < 0 && System.currentTimeMillis() - t0 > 1500) {
+                    try {
+                        muxer.start();
+                        muxStarted = true;
+                        audioDropped = true;
+                    } catch (Throwable ignored) {
+                    }
+                }
             }
             if (!muxStarted) return;
+            if (!video && (audioDropped || aTrack < 0)) return;
             long pts = Math.max(0L, info.presentationTimeUs);
             if (video) { pts = Math.max(pts, lastV + 1); lastV = pts; }
             else { pts = Math.max(pts, lastA + 1); lastA = pts; }
