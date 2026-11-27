@@ -32,6 +32,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
@@ -827,6 +828,7 @@ public class GameService extends Service {
             @Override public void onClick(View v) { toggleRecord(); }
         });
         PanelStyle.apply(root, PanelStyle.opacity(this));
+        Motion.pressAll(card);
         updateRecUi();
 
         card.setVisibility(View.GONE);
@@ -962,8 +964,18 @@ public class GameService extends Service {
         card.setVisibility(View.VISIBLE);
         card.setTranslationX(onRight ? w : -w);
         card.setAlpha(0.4f);
-        card.animate().translationX(0f).alpha(1f).setDuration(300)
-                .setInterpolator(new DecelerateInterpolator(1.6f)).start();
+        boolean anim = Motion.enabled(this);
+        card.animate().translationX(0f).alpha(1f).setDuration(anim ? 340 : 0)
+                .setInterpolator(new android.view.animation.OvershootInterpolator(0.7f)).start();
+        if (anim) {
+            int k = 0;
+            int[] rows = {R.id.gridRow1, R.id.gridRow2};
+            for (int id : rows) {
+                ViewGroup r = root.findViewById(id);
+                if (r == null) continue;
+                for (int i = 0; i < r.getChildCount(); i++) Motion.rise(r.getChildAt(i), 90L + 45L * k++);
+            }
+        }
         root.post(new Runnable() {
             @Override public void run() {
                 clampY();
@@ -981,8 +993,8 @@ public class GameService extends Service {
         handler.removeCallbacks(autoHide);
         float w = dp(CARD_W_DP);
         card.animate().cancel();
-        card.animate().translationX(onRight ? w : -w).alpha(0f).setDuration(240)
-                .setInterpolator(new DecelerateInterpolator())
+        card.animate().translationX(onRight ? w : -w).alpha(0f).setDuration(Motion.enabled(this) ? 220 : 0)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator(1.3f))
                 .withEndAction(new Runnable() {
                     @Override public void run() {
                         if (root == null || expanded) return;

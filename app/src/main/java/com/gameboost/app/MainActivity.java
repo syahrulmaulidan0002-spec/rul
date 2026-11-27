@@ -18,6 +18,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.widget.AdapterView;
 import android.widget.Button;
@@ -168,6 +169,10 @@ public class MainActivity extends Activity {
             }
         });
 
+        Motion.pressAll(header);
+        Motion.press(btnMain);
+        if (header instanceof ViewGroup) Motion.stagger((ViewGroup) header, 60);
+
         loadApps();
     }
 
@@ -262,6 +267,7 @@ public class MainActivity extends Activity {
                 removeFromMine(g);
                 return true;
             });
+            Motion.press(v);
             gamesRow.addView(v);
         }
         tvNoGames.setVisibility(mine.isEmpty() ? View.VISIBLE : View.GONE);
@@ -522,11 +528,13 @@ public class MainActivity extends Activity {
 
     private void openSettings() {
         startActivity(new Intent(this, SettingsActivity.class));
+        overridePendingTransition(R.anim.push_in, R.anim.push_back);
     }
 
     /** Halaman panduan langkah demi langkah Shizuku; hanya terbuka saat diketuk. */
     private void openGuide() {
         startActivity(new Intent(this, GuideActivity.class));
+        overridePendingTransition(R.anim.push_in, R.anim.push_back);
     }
 
     private void toast(String msg) {

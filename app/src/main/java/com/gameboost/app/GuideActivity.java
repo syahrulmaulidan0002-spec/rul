@@ -104,6 +104,15 @@ public class GuideActivity extends Activity {
             buildRow(box, r);
         }
         refresh();
+        Motion.pressAll(findViewById(R.id.gBack));
+        Motion.stagger(box, 40);
+    }
+
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.pop_in, R.anim.pop_out);
     }
 
     @Override

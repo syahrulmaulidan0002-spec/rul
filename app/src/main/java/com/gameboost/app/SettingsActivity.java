@@ -72,6 +72,10 @@ public class SettingsActivity extends Activity {
         buildSwitchRows((LinearLayout) findViewById(R.id.switchList));
         buildPreview();
         buildSaturation();
+        android.view.ViewGroup content = findViewById(R.id.settingsContent);
+        Motion.pressAll(content);
+        Motion.pressAll(findViewById(R.id.btnBack));
+        Motion.stagger(content, 60);
     }
 
     // ---------------------------------------------------------------- simulasi panel
@@ -191,6 +195,13 @@ public class SettingsActivity extends Activity {
             @Override public void onStartTrackingTouch(SeekBar s) {}
             @Override public void onStopTrackingTouch(SeekBar s) {}
         });
+    }
+
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.pop_in, R.anim.pop_out);
     }
 
     @Override
@@ -367,6 +378,7 @@ public class SettingsActivity extends Activity {
 
     private void openGuide() {
         startActivity(new Intent(this, GuideActivity.class));
+        overridePendingTransition(R.anim.push_in, R.anim.push_back);
     }
 
     private void toast(String msg) {
