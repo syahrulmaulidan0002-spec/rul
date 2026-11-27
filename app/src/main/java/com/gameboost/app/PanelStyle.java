@@ -25,21 +25,29 @@ final class PanelStyle {
     }
 
     private static Drawable tile(Context c, int o) {
+        return tile(c, o, 18);
+    }
+
+    private static Drawable tile(Context c, int o, float r) {
         float a = o / 100f;
-        return new GlassDrawable(c, 18, 0xFFFFFF, 0.05f + 0.13f * a, 0.8f);
+        return new GlassDrawable(c, r, 0xFFFFFF, 0.05f + 0.13f * a, 0.8f);
     }
 
     private static Drawable pressable(Context c, Drawable content) {
+        return pressable(c, content, 18);
+    }
+
+    private static Drawable pressable(Context c, Drawable content, float r) {
         GradientDrawable mask = new GradientDrawable();
         mask.setColor(Color.WHITE);
-        mask.setCornerRadius(18 * c.getResources().getDisplayMetrics().density);
+        mask.setCornerRadius(r * c.getResources().getDisplayMetrics().density);
         return new RippleDrawable(ColorStateList.valueOf(0x40FFFFFF), content, mask);
     }
 
     /** Tombol rekam: kaca kemerahan saat merekam, kaca biasa saat diam. */
     static Drawable recButton(Context c, boolean recording, int o) {
-        if (!recording) return pressable(c, tile(c, o));
-        return pressable(c, new GlassDrawable(c, 18, 0xFF453A, 0.32f, 1f));
+        if (!recording) return pressable(c, new GlassDrawable(c, 22, 0xFF453A, 0.16f + 0.1f * (o / 100f), 1f), 22);
+        return pressable(c, new GlassDrawable(c, 22, 0xFF453A, 0.42f, 1f), 22);
     }
 
     /** Pasang kaca ke kartu, kotak grafik, pil, dan tombol. Aman dipanggil berulang. */
@@ -50,7 +58,7 @@ final class PanelStyle {
         if (card != null) {
             int padL = card.getPaddingLeft(), padT = card.getPaddingTop();
             int padR = card.getPaddingRight(), padB = card.getPaddingBottom();
-            card.setBackground(new GlassDrawable(c, 28, 0x0B0E18, 0.07f + 0.78f * a, 1f));
+            card.setBackground(new GlassDrawable(c, 30, 0x0B0E18, 0.07f + 0.78f * a, 1f));
             card.setPadding(padL, padT, padR, padB);
         }
         int[] rows = {R.id.gridRow1, R.id.gridRow2};
@@ -59,15 +67,14 @@ final class PanelStyle {
             if (row == null) continue;
             for (int i = 0; i < row.getChildCount(); i++) row.getChildAt(i).setBackground(tile(c, o));
         }
-        int[] pills = {R.id.pillNet, R.id.pillFps, R.id.pillTemp};
-        for (int id : pills) {
-            View v = root.findViewById(id);
-            if (v != null) v.setBackground(tile(c, o));
-        }
+        View hero = root.findViewById(R.id.heroCard);
+        if (hero != null) hero.setBackground(new GlassDrawable(c, 22, 0x30D158, 0.10f + 0.10f * a, 0.9f));
+        View net = root.findViewById(R.id.pillNet);
+        if (net != null) net.setBackground(tile(c, o, 16));
         int[] btns = {R.id.btnShot, R.id.btnClean, R.id.btnStop};
         for (int id : btns) {
             View v = root.findViewById(id);
-            if (v != null) v.setBackground(pressable(c, tile(c, o)));
+            if (v != null) v.setBackground(pressable(c, tile(c, o, 22), 22));
         }
         View rec = root.findViewById(R.id.btnRec);
         if (rec != null && !Boolean.TRUE.equals(rec.getTag())) rec.setBackground(recButton(c, false, o));

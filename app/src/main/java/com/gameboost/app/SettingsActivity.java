@@ -181,14 +181,10 @@ public class SettingsActivity extends Activity {
         pr.findViewById(R.id.handle).setVisibility(View.GONE);
         pr.findViewById(R.id.card).setVisibility(View.VISIBLE);
         pr.findViewById(R.id.btnCollapse).setVisibility(View.INVISIBLE);
-        ((BatteryView) pr.findViewById(R.id.battery)).setLevel(78, false);
-        ((TextView) pr.findViewById(R.id.tvBatt)).setText("78%");
         ((TextView) pr.findViewById(R.id.tvTemp)).setText("36.2°C");
-        TextView pf = pr.findViewById(R.id.tvFps);
-        pf.setText("60 FPS");
-        pf.setTextColor(0xFF30D158);
+        ((FpsRing) pr.findViewById(R.id.fpsRing)).setFps(60);
         ((TextView) pr.findViewById(R.id.tvNetFocus)).setText("Fokus ke game");
-        ((TextView) pr.findViewById(R.id.tvHint)).setText("Performa stabil");
+        ((TextView) pr.findViewById(R.id.tvHint)).setText("Stabil");
         ((ImageView) pr.findViewById(R.id.icNetFocus)).setImageTintList(ColorStateList.valueOf(0xFF30D158));
 
         LinearLayout r1 = pr.findViewById(R.id.gridRow1);

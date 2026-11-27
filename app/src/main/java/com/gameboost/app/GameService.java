@@ -36,6 +36,7 @@ import android.view.ViewGroup;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -90,14 +91,17 @@ public class GameService extends Service {
     private WindowManager.LayoutParams lp;
     private View root, handle, card, btnClean;
     private ImageView icCollapse;
-    private BatteryView battery, handleBattery;
-    private TextView handleBattText;
+    private FpsRing ringFps;
+    private TextView tvGame;
+    private String shownPkg = "";
+    private View handleBar, handleCapsule;
+    private android.animation.ObjectAnimator handlePulse, recPulse;
     private boolean battReceiverOn = false;
     private boolean netFocus = false;
     private WifiManager.WifiLock wifiLock;
     private ImageView icNetFocus;
     private TextView tvNetFocus;
-    private TextView tvBatt, tvTemp, tvHint, tvToast, tvClean, tvFps;
+    private TextView tvTemp, tvHint, tvToast, tvClean, tvFps;
     private volatile int lastFps = -1;
     private final Metric[] metrics = new Metric[4];     // CPU, GPU, RAM, Internet
     private static final int M_CPU = 0, M_GPU = 1, M_RAM = 2, M_NET = 3;
@@ -378,6 +382,11 @@ public class GameService extends Service {
             sampleThread.quitSafely();
             sampleThread = null;
             sampleHandler = null;
+        }
+        stopHandleAnim();
+        if (recPulse != null) {
+            recPulse.cancel();
+            recPulse = null;
         }
         if (root != null && wm != null) {
             try {
@@ -746,12 +755,12 @@ public class GameService extends Service {
         handle = root.findViewById(R.id.handle);
         card = root.findViewById(R.id.card);
         icCollapse = root.findViewById(R.id.icCollapse);
-        battery = root.findViewById(R.id.battery);
-        handleBattery = root.findViewById(R.id.handleBattery);
-        handleBattText = root.findViewById(R.id.handleBattText);
+        ringFps = root.findViewById(R.id.fpsRing);
+        tvGame = root.findViewById(R.id.tvGame);
+        handleBar = root.findViewById(R.id.handleBar);
+        handleCapsule = root.findViewById(R.id.handleCapsule);
         icNetFocus = root.findViewById(R.id.icNetFocus);
         tvNetFocus = root.findViewById(R.id.tvNetFocus);
-        tvBatt = root.findViewById(R.id.tvBatt);
         tvTemp = root.findViewById(R.id.tvTemp);
         tvHint = root.findViewById(R.id.tvHint);
         tvFps = root.findViewById(R.id.tvFps);
@@ -773,6 +782,10 @@ public class GameService extends Service {
 
         // Panah tutup menunjuk ke arah tepi tempat panel menempel.
         icCollapse.setRotation(onRight ? 0f : 180f);
+        if (!onRight) {
+            ((FrameLayout.LayoutParams) handleCapsule.getLayoutParams()).gravity = Gravity.START;
+            handleCapsule.setScaleX(-1f);
+        }
 
         int type = Build.VERSION.SDK_INT >= 26
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -847,6 +860,7 @@ public class GameService extends Service {
         }
         updateBattery();
         updateNetChip();
+        startHandleAnim();
 
         // Gagang di tepi layar tidak boleh dikalahkan oleh gestur "kembali" sistem (Android 10+).
         if (Build.VERSION.SDK_INT >= 29) {
@@ -967,14 +981,16 @@ public class GameService extends Service {
         boolean anim = Motion.enabled(this);
         card.animate().translationX(0f).alpha(1f).setDuration(anim ? 340 : 0)
                 .setInterpolator(new android.view.animation.OvershootInterpolator(0.7f)).start();
+        stopHandleAnim();
         if (anim) {
+            ViewGroup cg = (ViewGroup) card;
             int k = 0;
-            int[] rows = {R.id.gridRow1, R.id.gridRow2};
-            for (int id : rows) {
-                ViewGroup r = root.findViewById(id);
-                if (r == null) continue;
-                for (int i = 0; i < r.getChildCount(); i++) Motion.rise(r.getChildAt(i), 90L + 45L * k++);
+            for (int i = 0; i < cg.getChildCount(); i++) {
+                View ch = cg.getChildAt(i);
+                if (ch.getVisibility() != View.VISIBLE) continue;
+                Motion.rise(ch, 60L + 70L * k++);
             }
+            if (ringFps != null) ringFps.replay();
         }
         root.post(new Runnable() {
             @Override public void run() {
@@ -1003,6 +1019,7 @@ public class GameService extends Service {
                         handle.setVisibility(View.VISIBLE);
                         handle.setAlpha(0f);
                         handle.animate().alpha(0.75f).setDuration(220).start();
+                        startHandleAnim();
                     }
                 }).start();
     }
@@ -1078,9 +1095,14 @@ public class GameService extends Service {
         }
 
         int fps = lastFps;
+        if (ringFps != null) ringFps.setFps(fps);
         if (tvFps != null) {
-            tvFps.setText(fps >= 0 ? fps + " FPS" : fpsReason(fps));
-            tvFps.setTextColor(fps < 0 ? 0xB8FFFFFF : fps >= 55 ? 0xFF30D158 : fps >= 30 ? 0xFFFF9F0A : 0xFFFF453A);
+            if (fps < 0) {
+                tvFps.setText(fpsReason(fps));
+                tvFps.setVisibility(View.VISIBLE);
+            } else {
+                tvFps.setVisibility(View.GONE);
+            }
         }
 
         // RAM ikut dicatat di siklus yang sama supaya keempat grafik sinkron.
@@ -1125,6 +1147,18 @@ public class GameService extends Service {
         btnRec.setBackground(PanelStyle.recButton(this, recording, PanelStyle.opacity(this)));
         icRec.setImageResource(recording ? R.drawable.ic_stop_sq : R.drawable.ic_record);
         if (!recording) tvRec.setText("Rekam");
+        if (recPulse != null) {
+            recPulse.cancel();
+            recPulse = null;
+        }
+        btnRec.setAlpha(1f);
+        if (recording && Motion.enabled(this)) {
+            recPulse = android.animation.ObjectAnimator.ofFloat(btnRec, View.ALPHA, 1f, 0.7f);
+            recPulse.setDuration(900);
+            recPulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            recPulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            recPulse.start();
+        }
     }
 
     /** Screenshot: panel disembunyikan sebentar supaya tidak ikut terfoto. */
@@ -1303,14 +1337,60 @@ public class GameService extends Service {
         icNetFocus.setColorFilter(color);
     }
 
-    /** Samakan semua ikon baterai (gagang + panel) dengan level baterai asli. */
+    /** Suhu (dari baterai) diperbarui saat level/suhu berubah; ikon baterai sudah tidak dipakai. */
     private void updateBattery() {
         if (root == null) return;
+        updateTemp();
+    }
+
+    private void updateTemp() {
         SysInfo.Batt b = SysInfo.battery(this);
-        handleBattery.setLevel(b.level, b.charging);
-        handleBattText.setText(b.level + "%");
-        battery.setLevel(b.level, b.charging);
-        tvBatt.setText(String.format(Locale.US, "%d%%", b.level));
+        tvTemp.setText(String.format(Locale.US, "%.1f°C", b.tempC));
+        tvTemp.setTextColor(SysInfo.color(this, b.tempC >= 43f ? R.color.danger
+                : (b.tempC >= 40f ? R.color.warn : R.color.text)));
+        tvHint.setText(b.tempC >= 43f ? "Panas" : (b.tempC >= 40f ? "Hangat" : "Stabil"));
+        tvHint.setTextColor(SysInfo.color(this, b.tempC >= 43f ? R.color.danger
+                : (b.tempC >= 40f ? R.color.warn : R.color.ok)));
+    }
+
+    /** Gagang bernapas pelan dan sesekali bergeser sedikit ke dalam supaya mudah ditemukan. */
+    private final Runnable handleNudge = new Runnable() {
+        @Override public void run() {
+            if (root == null || expanded || handle == null) return;
+            float dx = dp(7) * (onRight ? -1f : 1f);
+            handle.animate().translationX(dx).setDuration(200).setInterpolator(Motion.IOS)
+                    .withEndAction(new Runnable() {
+                        @Override public void run() {
+                            if (handle != null) handle.animate().translationX(0f).setDuration(420)
+                                    .setInterpolator(Motion.SPRING).start();
+                        }
+                    }).start();
+            handler.postDelayed(this, 4500);
+        }
+    };
+
+    private void startHandleAnim() {
+        stopHandleAnim();
+        if (handleBar == null || !Motion.enabled(this)) return;
+        handlePulse = android.animation.ObjectAnimator.ofFloat(handleBar, View.ALPHA, 0.5f, 1f);
+        handlePulse.setDuration(1200);
+        handlePulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        handlePulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        handlePulse.start();
+        handler.postDelayed(handleNudge, 4500);
+    }
+
+    private void stopHandleAnim() {
+        handler.removeCallbacks(handleNudge);
+        if (handlePulse != null) {
+            handlePulse.cancel();
+            handlePulse = null;
+        }
+        if (handleBar != null) handleBar.setAlpha(1f);
+        if (handle != null) {
+            handle.animate().cancel();
+            handle.setTranslationX(0f);
+        }
     }
 
     /** Bagian yang ringan dan dibaca di thread utama: baterai, suhu, RAM, jenis jaringan. */
@@ -1320,18 +1400,21 @@ public class GameService extends Service {
         SysInfo.Batt b = SysInfo.battery(this);
         netType = SysStats.networkType(this);
 
-        battery.setLevel(b.level, b.charging);
-        tvBatt.setText(String.format(Locale.US, "%d%%", b.level));
+        if (tvGame != null && gamePkg != null && !gamePkg.isEmpty() && !gamePkg.equals(shownPkg)) {
+            shownPkg = gamePkg;
+            try {
+                tvGame.setText(getPackageManager().getApplicationLabel(
+                        getPackageManager().getApplicationInfo(gamePkg, 0)));
+            } catch (Exception ignore) {
+                tvGame.setText("Mode game");
+            }
+        }
 
         Metric ram = metrics[M_RAM];
         ram.value.setText(r.usedPct + "%");
         ram.sub.setText(String.format(Locale.US, "%d / %d MB", r.usedMb, r.totalMb));
 
-        tvTemp.setText(String.format(Locale.US, "%.1f°C", b.tempC));
-        tvTemp.setTextColor(SysInfo.color(this, b.tempC >= 43f ? R.color.danger
-                : (b.tempC >= 40f ? R.color.warn : R.color.text)));
-        tvHint.setText(b.tempC >= 43f ? "Panas, turunkan grafis sebentar"
-                : (b.tempC >= 40f ? "Mulai hangat, pantau terus" : "Performa stabil"));
+        updateTemp();
 
         // Jaga posisi tetap di dalam layar jika layar diputar.
         int oy = lp.y;
