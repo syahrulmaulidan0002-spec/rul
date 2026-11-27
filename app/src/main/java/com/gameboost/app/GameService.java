@@ -859,7 +859,7 @@ public class GameService extends Service {
 
         card.setVisibility(View.GONE);
         handle.setVisibility(View.VISIBLE);
-        handle.setAlpha(0.75f);
+        handle.setAlpha(0.9f);
         try {
             wm.addView(root, lp);
         } catch (Exception e) {
@@ -1031,7 +1031,7 @@ public class GameService extends Service {
                         card.setTranslationX(0f);
                         handle.setVisibility(View.VISIBLE);
                         handle.setAlpha(0f);
-                        handle.animate().alpha(0.75f).setDuration(220).start();
+                        handle.animate().alpha(0.9f).setDuration(220).start();
                         startHandleAnim();
                     }
                 }).start();
@@ -1369,12 +1369,12 @@ public class GameService extends Service {
     /** Gagang bernapas pelan dan sesekali bergeser sedikit ke dalam supaya mudah ditemukan. */
     private final Runnable handleNudge = new Runnable() {
         @Override public void run() {
-            if (root == null || expanded || handle == null) return;
+            if (root == null || expanded || handleCapsule == null) return;
             float dx = dp(7) * (onRight ? -1f : 1f);
-            handle.animate().translationX(dx).setDuration(200).setInterpolator(Motion.IOS)
+            handleCapsule.animate().translationX(dx).setDuration(200).setInterpolator(Motion.IOS)
                     .withEndAction(new Runnable() {
                         @Override public void run() {
-                            if (handle != null) handle.animate().translationX(0f).setDuration(420)
+                            if (handleCapsule != null) handleCapsule.animate().translationX(0f).setDuration(420)
                                     .setInterpolator(Motion.SPRING).start();
                         }
                     }).start();
@@ -1400,9 +1400,9 @@ public class GameService extends Service {
             handlePulse = null;
         }
         if (handleBar != null) handleBar.setAlpha(1f);
-        if (handle != null) {
-            handle.animate().cancel();
-            handle.setTranslationX(0f);
+        if (handleCapsule != null) {
+            handleCapsule.animate().cancel();
+            handleCapsule.setTranslationX(0f);
         }
     }
 
