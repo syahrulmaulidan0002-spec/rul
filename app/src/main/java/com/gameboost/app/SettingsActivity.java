@@ -76,6 +76,7 @@ public class SettingsActivity extends Activity {
         buildPreview();
         buildSaturation();
         buildRecordQuality();
+        buildRecordPreset();
         android.view.ViewGroup content = findViewById(R.id.settingsContent);
         Motion.pressAll(content);
         Motion.pressAll(findViewById(R.id.btnBack));
@@ -107,6 +108,29 @@ public class SettingsActivity extends Activity {
             ui.postDelayed(this, 1300);
         }
     };
+
+    private void buildRecordPreset() {
+        final TextView val = findViewById(R.id.tvRecPreset);
+        SeekBar sb = findViewById(R.id.seekPreset);
+        int cur = Math.max(0, Math.min(2, prefs.getInt(RecordService.PREF_PRESET, 0)));
+        sb.setProgress(cur);
+        val.setText(RecordService.PRESET_LABEL[cur]);
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int p, boolean user) {
+                val.setText(RecordService.PRESET_LABEL[p]);
+                if (!user) return;
+                // Preset mengatur resolusi rekam, resolusi game, dan kunci 60 Hz sekaligus.
+                int res = p == 2 ? 1080 : 720;
+                prefs.edit().putInt(RecordService.PREF_PRESET, p).putInt(RecordService.PREF_RES, res)
+                        .putBoolean(RecordService.PREF_FULLSCALE, p >= 1)
+                        .putBoolean(RecordService.PREF_LOWHZ, p <= 1).apply();
+                SeekBar rs = findViewById(R.id.seekRec);
+                for (int i = 0; i < RecordService.RES.length; i++) if (RecordService.RES[i] == res) rs.setProgress(i);
+            }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        });
+    }
 
     private void buildRecordQuality() {
         final TextView val = findViewById(R.id.tvRecVal);

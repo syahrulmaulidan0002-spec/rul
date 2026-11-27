@@ -463,12 +463,26 @@ final class GameBooster {
      * Setelah rekaman selesai, kembali ke 80% bila setelan itu nyala.
      */
     static void setRecordingScale(Context ctx, String gamePkg, boolean recording) {
-        if (Build.VERSION.SDK_INT < 33 || !ShizukuHelper.ready()) return;
-        if (gamePkg == null || !SAFE_PKG.matcher(gamePkg).matches()) return;
         Context app = ctx.getApplicationContext();
-        if (!Prefs.flag(app, "downscale") || !state(app).getBoolean(KEY_PERF_ACTIVE, false)) return;
-        String scale = recording ? "1.0" : "0.8";
-        ShizukuHelper.exec("cmd game set --mode performance --downscale " + scale + " " + gamePkg + "\n");
+        if (!ShizukuHelper.ready() || !state(app).getBoolean(KEY_PERF_ACTIVE, false)) return;
+        StringBuilder sb = new StringBuilder();
+        SharedPreferences pr = Prefs.get(app);
+        // Resolusi game 100% saat merekam hanya bila dipilih (preset Seimbang/Tajam).
+        if (Build.VERSION.SDK_INT >= 33 && gamePkg != null && SAFE_PKG.matcher(gamePkg).matches()
+                && Prefs.flag(app, "downscale") && pr.getBoolean(RecordService.PREF_FULLSCALE, false)) {
+            sb.append("cmd game set --mode performance --downscale ").append(recording ? "1.0" : "0.8")
+                    .append(' ').append(gamePkg).append('\n');
+        }
+        // Layar dikunci 60 Hz saat merekam: tenaga GPU tersisa untuk encoder, FPS game lebih stabil.
+        if (state(app).getBoolean(KEY_RR_CHANGED, false) && pr.getBoolean(RecordService.PREF_LOWHZ, true)) {
+            float max = maxRefreshRate(app);
+            if (max > 61f) {
+                int hz = recording ? 60 : Math.round(max);
+                sb.append("settings put system min_refresh_rate ").append(hz).append('\n');
+                sb.append("settings put system peak_refresh_rate ").append(hz).append('\n');
+            }
+        }
+        if (sb.length() > 0) ShizukuHelper.exec(sb.toString());
     }
 
     private static void appendPerfRestore(SharedPreferences sp, StringBuilder sb) {

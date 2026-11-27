@@ -52,12 +52,16 @@ public class RecordService extends Service {
     static final String EX_DATA = "data";
     static final String EX_GAME = "game";
     static final String EX_MIC = "mic";
+    static final String PREF_PRESET = "rec_preset";          // 0 Lancar, 1 Seimbang, 2 Tajam
+    static final String PREF_FULLSCALE = "rec_fullscale";    // resolusi game 100% saat merekam
+    static final String PREF_LOWHZ = "rec_lowhz";            // kunci layar 60 Hz saat merekam
+    static final String[] PRESET_LABEL = {"Lancar", "Seimbang", "Tajam"};
     static final String PREF_GAME = "rec_game";
     static final String PREF_MIC = "rec_mic";
     static final String PREF_RES = "rec_res";
     static final int[] RES = {360, 480, 720, 1080, 1440};
     static final String[] RES_LABEL = {"360p", "480p", "720p HD", "1080p Full HD", "1440p (2K)"};
-    static final int DEFAULT_RES = 1080;
+    static final int DEFAULT_RES = 720;
 
     private static final String CHANNEL = "gameboost_rec";
     private static final int NOTIF_ID = 31;
@@ -198,7 +202,10 @@ public class RecordService extends Service {
         }
         vf.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
         if (Build.VERSION.SDK_INT >= 23) vf.setInteger(MediaFormat.KEY_PRIORITY, 0);   // prioritas waktu nyata
-        vEnc = MediaCodec.createEncoderByType("video/avc");
+        if (Build.VERSION.SDK_INT >= 30) vf.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
+        // Buang frame berlebih sebelum masuk encoder (game 60/90 fps -> rekam 30 fps): beban encoder turun.
+        vf.setFloat("max-fps-to-encoder", (float) FPS);
+        vEnc = hardwareEncoder();
         // Profil High = kualitas lebih baik di bitrate yang sama. Bila encoder menolak, pakai bawaannya.
         try {
             MediaFormat hi = new MediaFormat(vf);
@@ -206,7 +213,8 @@ public class RecordService extends Service {
             vEnc.configure(hi, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         } catch (Throwable t) {
             try { vEnc.release(); } catch (Throwable ignored) { }
-            vEnc = MediaCodec.createEncoderByType("video/avc");
+            vEnc = hardwareEncoder();
+            vf.removeKey("max-fps-to-encoder");
             vEnc.configure(vf, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         }
         Surface in = vEnc.createInputSurface();
@@ -276,6 +284,22 @@ public class RecordService extends Service {
             aThread.start();
         }
         started(hasAudio);
+    }
+
+    /** Pilih encoder H.264 perangkat keras (hemat CPU). Encoder perangkat lunak dilewati. */
+    private static MediaCodec hardwareEncoder() throws Exception {
+        try {
+            for (MediaCodecInfo ci : new android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
+                if (!ci.isEncoder()) continue;
+                String name = ci.getName();
+                if (name.startsWith("c2.android.") || name.startsWith("OMX.google.") || name.contains(".sw.")) continue;
+                for (String t : ci.getSupportedTypes()) {
+                    if (t.equalsIgnoreCase("video/avc")) return MediaCodec.createByCodecName(name);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return MediaCodec.createEncoderByType("video/avc");
     }
 
     private void openOutput() throws Exception {
