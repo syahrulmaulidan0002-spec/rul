@@ -22,6 +22,7 @@ public class FpsRing extends View {
     private final RectF rect = new RectF();
     private final float d;
 
+    private float k = 96 * 1f;
     private int fps = -1;
     private float shown = 0f;
     private ValueAnimator anim;
@@ -55,8 +56,15 @@ public class FpsRing extends View {
 
     @Override
     protected void onSizeChanged(int w, int h, int ow, int oh) {
-        float pad = 9 * d;
         float s = Math.min(w, h);
+        float pad = s * 0.094f;
+        float sw = s * 0.073f;
+        track.setStrokeWidth(sw);
+        arc.setStrokeWidth(sw);
+        glow.setStrokeWidth(sw * 1.7f);
+        num.setTextSize(s * 0.335f);
+        lab.setTextSize(Math.max(7f * d, s * 0.099f));
+        k = s;
         float l = (w - s) / 2f + pad, t = (h - s) / 2f + pad;
         rect.set(l, t, l + s - 2 * pad, t + s - 2 * pad);
         applyColor();
@@ -128,7 +136,7 @@ public class FpsRing extends View {
             c.drawArc(rect, -90f, 360f * shown, false, arc);
         }
         float cx = getWidth() / 2f, cy = getHeight() / 2f;
-        c.drawText(fps < 0 ? "—" : String.valueOf(fps), cx, cy + 6 * d, num);
-        c.drawText("FPS", cx, cy + 22 * d, lab);
+        c.drawText(fps < 0 ? "—" : String.valueOf(fps), cx, cy + k * 0.06f, num);
+        c.drawText("FPS", cx, cy + k * 0.23f, lab);
     }
 }

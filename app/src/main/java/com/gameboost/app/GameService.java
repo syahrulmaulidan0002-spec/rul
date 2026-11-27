@@ -791,7 +791,7 @@ public class GameService extends Service {
         metrics[M_CPU] = addMetric(row1, "CPU", 0xFF0A84FF, 100f, 1f);
         metrics[M_GPU] = addMetric(row1, "GPU", 0xFFBF5AF2, 100f, 1f);
         metrics[M_RAM] = addMetric(row2, "RAM", 0xFF30D158, 100f, 1f);
-        metrics[M_NET] = addMetric(row2, "INTERNET", 0xFFFF9F0A, 0f, 64f);   // skala otomatis (KB/s)
+        metrics[M_NET] = addMetric(row2, "NET", 0xFFFF9F0A, 0f, 64f);   // skala otomatis (KB/s)
 
         // Panah tutup menunjuk ke arah tepi tempat panel menempel.
         icCollapse.setRotation(onRight ? 0f : 180f);
@@ -849,6 +849,7 @@ public class GameService extends Service {
         btnRec.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { toggleRecord(); }
         });
+        applyCompact();
         PanelStyle.apply(root, PanelStyle.opacity(this));
         Motion.pressAll(card);
         RecordService.listener = recListener;
@@ -859,7 +860,7 @@ public class GameService extends Service {
 
         card.setVisibility(View.GONE);
         handle.setVisibility(View.VISIBLE);
-        handle.setAlpha(0.9f);
+        handle.setAlpha(0.8f);
         try {
             wm.addView(root, lp);
         } catch (Exception e) {
@@ -1031,7 +1032,7 @@ public class GameService extends Service {
                         card.setTranslationX(0f);
                         handle.setVisibility(View.VISIBLE);
                         handle.setAlpha(0f);
-                        handle.animate().alpha(0.9f).setDuration(220).start();
+                        handle.animate().alpha(0.8f).setDuration(220).start();
                         startHandleAnim();
                     }
                 }).start();
@@ -1382,10 +1383,50 @@ public class GameService extends Service {
         }
     };
 
+    private boolean compactOn = false, compactInit = false;
+
+    /** Layar pendek (mode lanskap): panel dipadatkan supaya seluruhnya terlihat, termasuk dok tombol. */
+    private void applyCompact() {
+        if (root == null) return;
+        boolean c = getResources().getConfiguration().screenHeightDp < 520;
+        if (compactInit && c == compactOn) return;
+        compactInit = true;
+        compactOn = c;
+        int ring = dp(c ? 62 : 96);
+        View r = root.findViewById(R.id.fpsRing);
+        r.getLayoutParams().width = ring;
+        r.getLayoutParams().height = ring;
+        r.requestLayout();
+        View hero = root.findViewById(R.id.heroCard);
+        int hp = dp(c ? 8 : 12);
+        hero.setPadding(hp, hp, hp, hp);
+        View net = root.findViewById(R.id.pillNet);
+        if (net != null) net.setVisibility(c ? View.GONE : View.VISIBLE);
+        for (Metric m : metrics) {
+            if (m == null) continue;
+            m.spark.getLayoutParams().height = dp(c ? 28 : 50);
+            m.spark.requestLayout();
+            ((View) m.spark.getParent()).setPadding(dp(c ? 8 : 10), dp(c ? 6 : 10), dp(c ? 8 : 10), dp(c ? 5 : 10));
+        }
+        View dock = root.findViewById(R.id.dock);
+        if (dock != null) {
+            ((ViewGroup.MarginLayoutParams) dock.getLayoutParams()).topMargin = dp(c ? 6 : 10);
+            dock.requestLayout();
+        }
+        int bh = dp(c ? 38 : 44);
+        int[] ids = {R.id.btnRec, R.id.btnShot, R.id.btnClean, R.id.btnStop};
+        for (int id : ids) {
+            View b = root.findViewById(id);
+            b.getLayoutParams().height = bh;
+            if (id != R.id.btnRec) b.getLayoutParams().width = bh;
+            b.requestLayout();
+        }
+    }
+
     private void startHandleAnim() {
         stopHandleAnim();
         if (handleBar == null || !Motion.enabled(this)) return;
-        handlePulse = android.animation.ObjectAnimator.ofFloat(handleBar, View.ALPHA, 0.5f, 1f);
+        handlePulse = android.animation.ObjectAnimator.ofFloat(handleBar, View.ALPHA, 0.35f, 0.8f);
         handlePulse.setDuration(1200);
         handlePulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
         handlePulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
@@ -1430,6 +1471,7 @@ public class GameService extends Service {
         updateTemp();
 
         // Jaga posisi tetap di dalam layar jika layar diputar.
+        applyCompact();
         int oy = lp.y;
         clampY();
         if (oy != lp.y) applyLayout();
