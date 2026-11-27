@@ -849,7 +849,6 @@ public class GameService extends Service {
         btnRec.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { toggleRecord(); }
         });
-        applyCompact();
         PanelStyle.apply(root, PanelStyle.opacity(this));
         Motion.pressAll(card);
         RecordService.listener = recListener;
@@ -1008,6 +1007,7 @@ public class GameService extends Service {
         }
         root.post(new Runnable() {
             @Override public void run() {
+                fitScale();
                 clampY();
                 applyLayout();
             }
@@ -1383,44 +1383,13 @@ public class GameService extends Service {
         }
     };
 
-    private boolean compactOn = false, compactInit = false;
-
-    /** Layar pendek (mode lanskap): panel dipadatkan supaya seluruhnya terlihat, termasuk dok tombol. */
-    private void applyCompact() {
-        if (root == null) return;
-        boolean c = getResources().getConfiguration().screenHeightDp < 520;
-        if (compactInit && c == compactOn) return;
-        compactInit = true;
-        compactOn = c;
-        int ring = dp(c ? 62 : 96);
-        View r = root.findViewById(R.id.fpsRing);
-        r.getLayoutParams().width = ring;
-        r.getLayoutParams().height = ring;
-        r.requestLayout();
-        View hero = root.findViewById(R.id.heroCard);
-        int hp = dp(c ? 8 : 12);
-        hero.setPadding(hp, hp, hp, hp);
-        View net = root.findViewById(R.id.pillNet);
-        if (net != null) net.setVisibility(c ? View.GONE : View.VISIBLE);
-        for (Metric m : metrics) {
-            if (m == null) continue;
-            m.spark.getLayoutParams().height = dp(c ? 28 : 50);
-            m.spark.requestLayout();
-            ((View) m.spark.getParent()).setPadding(dp(c ? 8 : 10), dp(c ? 6 : 10), dp(c ? 8 : 10), dp(c ? 5 : 10));
-        }
-        View dock = root.findViewById(R.id.dock);
-        if (dock != null) {
-            ((ViewGroup.MarginLayoutParams) dock.getLayoutParams()).topMargin = dp(c ? 6 : 10);
-            dock.requestLayout();
-        }
-        int bh = dp(c ? 38 : 44);
-        int[] ids = {R.id.btnRec, R.id.btnShot, R.id.btnClean, R.id.btnStop};
-        for (int id : ids) {
-            View b = root.findViewById(id);
-            b.getLayoutParams().height = bh;
-            if (id != R.id.btnRec) b.getLayoutParams().width = bh;
-            b.requestLayout();
-        }
+    /** Layar pendek (lanskap): kartu diperkecil seragam supaya utuh terlihat, tanpa mengubah desain. */
+    private void fitScale() {
+        if (root == null || !(root instanceof ScaleFrame) || card == null) return;
+        int ch = card.getHeight();
+        if (ch <= 0) return;
+        float avail = screen()[1] - dp(16);
+        ((ScaleFrame) root).setCardScale(Math.min(1f, avail / ch));
     }
 
     private void startHandleAnim() {
@@ -1471,7 +1440,7 @@ public class GameService extends Service {
         updateTemp();
 
         // Jaga posisi tetap di dalam layar jika layar diputar.
-        applyCompact();
+        fitScale();
         int oy = lp.y;
         clampY();
         if (oy != lp.y) applyLayout();
