@@ -1,0 +1,65 @@
+package com.gameboost.app;
+
+import android.Manifest;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.media.projection.MediaProjectionManager;
+import android.os.Build;
+import android.os.Bundle;
+
+/** Layar bening sesaat: minta izin suara + izin rekam layar, lalu menyalakan RecordService. */
+public class RecordPermActivity extends Activity {
+
+    private static final int REQ_AUDIO = 1;
+    private static final int REQ_PROJ = 2;
+    private boolean audioOk = false;
+
+    @Override
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        if (Build.VERSION.SDK_INT >= 23
+                && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
+        } else {
+            audioOk = true;
+            askProjection();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] p, int[] r) {
+        audioOk = r.length > 0 && r[0] == PackageManager.PERMISSION_GRANTED;
+        askProjection();
+    }
+
+    private void askProjection() {
+        try {
+            MediaProjectionManager m = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+            startActivityForResult(m.createScreenCaptureIntent(), REQ_PROJ);
+        } catch (Exception e) {
+            fail("Tidak bisa meminta izin rekam");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != REQ_PROJ) return;
+        if (res == RESULT_OK && data != null) {
+            Intent i = new Intent(this, RecordService.class).setAction(RecordService.ACTION_START)
+                    .putExtra(RecordService.EX_CODE, res).putExtra(RecordService.EX_DATA, data)
+                    .putExtra(RecordService.EX_AUDIO, audioOk);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+            finish();
+        } else {
+            fail("Izin rekam ditolak");
+        }
+    }
+
+    private void fail(String msg) {
+        RecordService.Listener l = RecordService.listener;
+        if (l != null) l.onStopped(false, msg);
+        finish();
+    }
+}

@@ -231,6 +231,57 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="7dp"
+                android:text="REKAM LAYAR" />
+
+            <LinearLayout
+                style="@style/Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Kualitas rekam"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/tvRecVal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/accent"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/seekRec"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:max="4" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="360p sampai 1440p (2K), bawaan 720p. Makin tinggi makin tajam tapi makin berat dan file makin besar; di HP lemah pakai 720p atau lebih rendah. Suara game ikut terekam (izin suara akan diminta sekali). Game yang melarang perekaman suara akan hening. Dialog izin rekam layar muncul tiap kali mulai merekam."
+                    android:textColor="@color/muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/Section"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="7dp"
                 android:text="MODE GAME" />
 
             <LinearLayout

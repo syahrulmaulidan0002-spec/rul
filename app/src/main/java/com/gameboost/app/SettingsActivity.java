@@ -72,6 +72,7 @@ public class SettingsActivity extends Activity {
         buildSwitchRows((LinearLayout) findViewById(R.id.switchList));
         buildPreview();
         buildSaturation();
+        buildRecordQuality();
         android.view.ViewGroup content = findViewById(R.id.settingsContent);
         Motion.pressAll(content);
         Motion.pressAll(findViewById(R.id.btnBack));
@@ -103,6 +104,24 @@ public class SettingsActivity extends Activity {
             ui.postDelayed(this, 1300);
         }
     };
+
+    private void buildRecordQuality() {
+        final TextView val = findViewById(R.id.tvRecVal);
+        SeekBar sb = findViewById(R.id.seekRec);
+        int cur = prefs.getInt(RecordService.PREF_RES, RecordService.DEFAULT_RES);
+        int idx = 2;
+        for (int i = 0; i < RecordService.RES.length; i++) if (RecordService.RES[i] == cur) idx = i;
+        sb.setProgress(idx);
+        val.setText(RecordService.RES_LABEL[idx]);
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int p, boolean user) {
+                val.setText(RecordService.RES_LABEL[p]);
+                prefs.edit().putInt(RecordService.PREF_RES, RecordService.RES[p]).apply();
+            }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        });
+    }
 
     private void buildSaturation() {
         final View before = findViewById(R.id.satBefore);

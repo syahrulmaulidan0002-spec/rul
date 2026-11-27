@@ -359,13 +359,7 @@ public class GameService extends Service {
         handler.removeCallbacks(watchdog);
         handler.removeCallbacks(breakTask);
         stopSampling();
-        if (recording) {
-            recording = false;
-            handler.removeCallbacks(recTick);
-            new Thread(new Runnable() {
-                @Override public void run() { ScreenCapture.stopRecord(); }
-            }).start();
-        }
+        if (RecordService.active) RecordService.stop(this);
         if (wifiLock != null) {
             try {
                 if (wifiLock.isHeld()) wifiLock.release();
@@ -428,6 +422,7 @@ public class GameService extends Service {
             sampleThread.quitSafely();
             sampleThread = null;
         }
+        if (RecordService.listener == recListener) RecordService.listener = null;
         stopForeground(true);
         super.onDestroy();
     }
@@ -829,6 +824,10 @@ public class GameService extends Service {
         });
         PanelStyle.apply(root, PanelStyle.opacity(this));
         Motion.pressAll(card);
+        RecordService.listener = recListener;
+        recording = RecordService.active;
+        recStart = RecordService.startedAt;
+        if (recording) handler.post(recTick);
         updateRecUi();
 
         card.setVisibility(View.GONE);
@@ -1161,56 +1160,55 @@ public class GameService extends Service {
         }, 330);
     }
 
+    private boolean recStarting = false;
+
+    private final RecordService.Listener recListener = new RecordService.Listener() {
+        @Override public void onStarted(boolean withAudio) {
+            recStarting = false;
+            recording = true;
+            recStart = RecordService.startedAt;
+            handler.removeCallbacks(recTick);
+            handler.post(recTick);
+            vibrate(25);
+            updateRecUi();
+            if (!withAudio) flashToast("Merekam tanpa suara (izin suara tidak diberikan)");
+        }
+
+        @Override public void onStopped(boolean saved, String message) {
+            recStarting = false;
+            recording = false;
+            handler.removeCallbacks(recTick);
+            updateRecUi();
+            if (saved) {
+                postQuietNotification(NOTIF_SHOT_ID + 1, "Rekaman tersimpan", "Folder Movies/GameBoost");
+                if (root != null) toastIcon("Rekaman tersimpan", R.drawable.ic_check, R.color.ok);
+                else android.widget.Toast.makeText(GameService.this, "Rekaman tersimpan",
+                        android.widget.Toast.LENGTH_SHORT).show();
+            } else if (message != null) {
+                if (root != null) flashToast(message);
+                else android.widget.Toast.makeText(GameService.this, message,
+                        android.widget.Toast.LENGTH_SHORT).show();
+            }
+        }
+    };
+
+    /** Rekam layar + suara game (MediaProjection). Dialog izin muncul sebentar di atas game. */
     private void toggleRecord() {
-        if (!ShizukuHelper.ready()) {
-            flashToast("Butuh Shizuku aktif");
+        RecordService.listener = recListener;
+        if (RecordService.active) {
+            RecordService.stop(this);
             return;
         }
-        if (recBusy) return;
-        recBusy = true;
-        final boolean start = !recording;
-        final int[] sz = screen();
-        new Thread(new Runnable() {
-            @Override public void run() {
-                final boolean ok;
-                final String name;
-                if (start) {
-                    ok = ScreenCapture.startRecord(sz[0], sz[1]);
-                    name = null;
-                } else {
-                    name = ScreenCapture.stopRecord();
-                    ok = true;
-                }
-                handler.post(new Runnable() {
-                    @Override public void run() {
-                        recBusy = false;
-                        if (start) {
-                            recording = ok;
-                            if (ok && !running) {              // sesi sudah selesai selagi rekaman dimulai
-                                recording = false;
-                                new Thread(new Runnable() {
-                                    @Override public void run() { ScreenCapture.stopRecord(); }
-                                }).start();
-                            } else if (ok) {
-                                recStart = System.currentTimeMillis();
-                                handler.post(recTick);
-                                toastIcon("Merekam…", R.drawable.ic_record, R.color.danger);
-                            } else {
-                                flashToast("Rekam gagal dimulai");
-                            }
-                        } else {
-                            recording = false;
-                            handler.removeCallbacks(recTick);
-                            if (name != null) postQuietNotification(NOTIF_SHOT_ID + 1,
-                                    "Rekaman tersimpan", "Folder Movies/GameBoost");
-                            if (name != null) toastIcon("Rekaman tersimpan", R.drawable.ic_check, R.color.ok);
-                            else flashToast("Rekaman tidak ditemukan");
-                        }
-                        updateRecUi();
-                    }
-                });
-            }
-        }).start();
+        if (recStarting) return;
+        recStarting = true;
+        handler.removeCallbacks(autoHide);
+        closePanel();
+        try {
+            startActivity(new Intent(this, RecordPermActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception e) {
+            recStarting = false;
+            flashToast("Tidak bisa membuka izin rekam");
+        }
     }
 
     private void flashToast(String msg) {

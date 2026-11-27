@@ -11,6 +11,15 @@
         <item name="android:fontFamily">sans-serif</item>
     </style>
 
+    <!-- Layar bening untuk dialog izin rekam -->
+    <style name="Theme.GameBoost.Trans" parent="Theme.GameBoost">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
     <!-- Kartu grup ala iOS (inset grouped) -->
     <style name="Card">
         <item name="android:background">@drawable/bg_card</item>
