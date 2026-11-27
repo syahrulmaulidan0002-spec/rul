@@ -125,6 +125,7 @@
         <activity
             android:name=".RecordPermActivity"
             android:excludeFromRecents="true"
+            android:taskAffinity=""
             android:exported="false"
             android:theme="@style/Theme.GameBoost.Trans" />
 

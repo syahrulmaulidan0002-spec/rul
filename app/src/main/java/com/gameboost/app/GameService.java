@@ -1226,7 +1226,8 @@ public class GameService extends Service {
         handler.removeCallbacks(autoHide);
         closePanel();
         try {
-            startActivity(new Intent(this, RecordPermActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            startActivity(new Intent(this, RecordPermActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION));
         } catch (Exception e) {
             recStarting = false;
             flashToast("Tidak bisa membuka izin rekam");
