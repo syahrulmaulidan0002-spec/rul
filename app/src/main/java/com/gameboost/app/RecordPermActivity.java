@@ -20,6 +20,23 @@ public class RecordPermActivity extends Activity {
         super.onCreate(b);
         wantGame = Prefs.get(this).getBoolean(RecordService.PREF_GAME, true);
         wantMic = Prefs.get(this).getBoolean(RecordService.PREF_MIC, false);
+        if (ShizukuHelper.ready()) {
+            // Beri izin lewat Shizuku supaya dialog sistem "Mulai sekarang" dan izin suara tidak muncul
+            // di atas game. Dijalankan di thread lain, lalu lanjut.
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    ShizukuHelper.exec("appops set " + getPackageName() + " PROJECT_MEDIA allow\n"
+                            + "pm grant " + getPackageName() + " android.permission.RECORD_AUDIO\n");
+                    runOnUiThread(new Runnable() { @Override public void run() { checkAudio(); } });
+                }
+            }).start();
+        } else {
+            checkAudio();
+        }
+    }
+
+    private void checkAudio() {
+        if (isFinishing()) return;
         if (!wantGame && !wantMic) {
             askProjection();
             return;

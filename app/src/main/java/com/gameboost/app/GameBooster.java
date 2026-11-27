@@ -458,6 +458,19 @@ final class GameBooster {
         return out != null;
     }
 
+    /**
+     * Saat merekam, resolusi game dikembalikan 100% (mode performa tetap), supaya rekaman tajam.
+     * Setelah rekaman selesai, kembali ke 80% bila setelan itu nyala.
+     */
+    static void setRecordingScale(Context ctx, String gamePkg, boolean recording) {
+        if (Build.VERSION.SDK_INT < 33 || !ShizukuHelper.ready()) return;
+        if (gamePkg == null || !SAFE_PKG.matcher(gamePkg).matches()) return;
+        Context app = ctx.getApplicationContext();
+        if (!Prefs.flag(app, "downscale") || !state(app).getBoolean(KEY_PERF_ACTIVE, false)) return;
+        String scale = recording ? "1.0" : "0.8";
+        ShizukuHelper.exec("cmd game set --mode performance --downscale " + scale + " " + gamePkg + "\n");
+    }
+
     private static void appendPerfRestore(SharedPreferences sp, StringBuilder sb) {
         String game = sp.getString(KEY_PERF_GAME, null);
         if (Build.VERSION.SDK_INT >= 31 && game != null && SAFE_PKG.matcher(game).matches()) {

@@ -57,7 +57,7 @@ public class RecordService extends Service {
     static final String PREF_RES = "rec_res";
     static final int[] RES = {360, 480, 720, 1080, 1440};
     static final String[] RES_LABEL = {"360p", "480p", "720p HD", "1080p Full HD", "1440p (2K)"};
-    static final int DEFAULT_RES = 720;
+    static final int DEFAULT_RES = 1080;
 
     private static final String CHANNEL = "gameboost_rec";
     private static final int NOTIF_ID = 31;
@@ -196,8 +196,19 @@ public class RecordService extends Service {
             vf.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
             vf.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
         }
+        vf.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
+        if (Build.VERSION.SDK_INT >= 23) vf.setInteger(MediaFormat.KEY_PRIORITY, 0);   // prioritas waktu nyata
         vEnc = MediaCodec.createEncoderByType("video/avc");
-        vEnc.configure(vf, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        // Profil High = kualitas lebih baik di bitrate yang sama. Bila encoder menolak, pakai bawaannya.
+        try {
+            MediaFormat hi = new MediaFormat(vf);
+            hi.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileHigh);
+            vEnc.configure(hi, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        } catch (Throwable t) {
+            try { vEnc.release(); } catch (Throwable ignored) { }
+            vEnc = MediaCodec.createEncoderByType("video/avc");
+            vEnc.configure(vf, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        }
         Surface in = vEnc.createInputSurface();
         vEnc.start();
         display = projection.createVirtualDisplay("GameBoost", w, h, dm.densityDpi,

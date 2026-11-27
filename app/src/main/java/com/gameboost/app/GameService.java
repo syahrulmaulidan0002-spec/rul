@@ -173,7 +173,7 @@ public class GameService extends Service {
             SysStats st = stats;
             if (!sampling || st == null) return;
             final SysStats.Snap snap = st.sample(getApplicationContext());
-            lastFps = FpsMeter.read(gamePkg);
+            if (expanded && !RecordService.active) lastFps = FpsMeter.read(gamePkg);   // berat: hanya saat panel terbuka
             handler.post(new Runnable() {
                 @Override public void run() { applyStats(snap); }
             });
@@ -1171,6 +1171,14 @@ public class GameService extends Service {
 
     private boolean recStarting = false;
 
+    private void scaleForRecording(final boolean on) {
+        final Context app = getApplicationContext();
+        final String game = gamePkg;
+        new Thread(new Runnable() {
+            @Override public void run() { GameBooster.setRecordingScale(app, game, on); }
+        }).start();
+    }
+
     private final RecordService.Listener recListener = new RecordService.Listener() {
         @Override public void onStarted(boolean withAudio) {
             recStarting = false;
@@ -1179,6 +1187,7 @@ public class GameService extends Service {
             handler.removeCallbacks(recTick);
             handler.post(recTick);
             vibrate(25);
+            scaleForRecording(true);
             updateRecUi();
             android.content.SharedPreferences rp = Prefs.get(GameService.this);
             if (!withAudio && (rp.getBoolean(RecordService.PREF_GAME, true) || rp.getBoolean(RecordService.PREF_MIC, false)))
@@ -1186,9 +1195,11 @@ public class GameService extends Service {
         }
 
         @Override public void onStopped(boolean saved, String message) {
+            boolean was = recording;
             recStarting = false;
             recording = false;
             handler.removeCallbacks(recTick);
+            if (was) scaleForRecording(false);
             updateRecUi();
             if (saved) {
                 postQuietNotification(NOTIF_SHOT_ID + 1, "Rekaman tersimpan", "Folder Movies/GameBoost");
