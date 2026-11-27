@@ -46,8 +46,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class RecordService extends Service {
 
-    static final String ACTION_START = "gb.rec.start";
-    static final String ACTION_STOP = "gb.rec.stop";
+    static final String ACTION_ARM = "gb.rec.arm";          // simpan izin rekam layar (siaga)
+    static final String ACTION_START = "gb.rec.start";      // mulai merekam (butuh siaga)
+    static final String ACTION_STOP = "gb.rec.stop";        // berhenti merekam (atau matikan siaga)
+    static final String ACTION_DISARM = "gb.rec.disarm";    // matikan siaga sepenuhnya
+    static final String MSG_NEED_PERM = "NEED_PERM";
+    static final String EX_AUTOSTART = "autostart";
     static final String EX_CODE = "code";
     static final String EX_DATA = "data";
     static final String EX_GAME = "game";
@@ -73,13 +77,30 @@ public class RecordService extends Service {
         void onStopped(boolean saved, String message);
     }
 
-    static volatile boolean active = false;
+    static volatile boolean active = false;     // sedang merekam
+    static volatile boolean armed = false;      // izin rekam layar sudah dipegang (siap merekam)
     static volatile long startedAt = 0;
     static volatile Listener listener;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     static void stop(Context c) {
         if (active) c.startService(new Intent(c, RecordService.class).setAction(ACTION_STOP));
+    }
+
+    /** Simpan izin rekam layar di awal sesi, supaya merekam nanti tidak perlu pindah layar. */
+    static void arm(Context c, int code, Intent data, boolean autostart) {
+        Intent i = new Intent(c, RecordService.class).setAction(ACTION_ARM)
+                .putExtra(EX_CODE, code).putExtra(EX_DATA, data).putExtra(EX_AUTOSTART, autostart);
+        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
+    }
+
+    static void start(Context c) {
+        c.startService(new Intent(c, RecordService.class).setAction(ACTION_START));
+    }
+
+    /** Akhir sesi game: hentikan rekaman bila ada dan lepaskan izin. */
+    static void disarm(Context c) {
+        if (armed || active) c.startService(new Intent(c, RecordService.class).setAction(ACTION_DISARM));
     }
 
     private static void started(final boolean audio) {
@@ -116,36 +137,96 @@ public class RecordService extends Service {
         return null;
     }
 
+    private volatile boolean starting = false;
+    private volatile boolean fgOn = false;
+
     @Override
     public int onStartCommand(final Intent intent, int flags, int startId) {
         if (intent == null) {
-            stopSelf();
+            if (!armed) stopSelf();
             return START_NOT_STICKY;
         }
-        if (ACTION_STOP.equals(intent.getAction())) {
-            finish();
-            return START_NOT_STICKY;
+        String act = intent.getAction();
+        if (ACTION_STOP.equals(act)) {
+            if (active) finishRecording(); else disarm();
+        } else if (ACTION_DISARM.equals(act)) {
+            disarm();
+        } else if (ACTION_ARM.equals(act)) {
+            arm(intent);
+        } else if (ACTION_START.equals(act)) {
+            startRecording();
         }
-        if (active) return START_NOT_STICKY;
-        final boolean wantGame = intent.getBooleanExtra(EX_GAME, false);
-        final boolean wantMic = intent.getBooleanExtra(EX_MIC, false);
-        showForeground(wantMic);
-        final int code = intent.getIntExtra(EX_CODE, 0);
-        final Intent data = intent.getParcelableExtra(EX_DATA);
-        new Thread(new Runnable() {
-            @Override public void run() {
-                try {
-                    begin(code, data, wantGame, wantMic);
-                } catch (Throwable t) {
-                    abort("Rekam gagal: " + (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
-                }
-            }
-        }).start();
         return START_NOT_STICKY;
     }
 
+    private boolean audioGranted() {
+        return Build.VERSION.SDK_INT < 23
+                || checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void arm(Intent intent) {
+        boolean mic = Prefs.get(this).getBoolean(PREF_MIC, false) && audioGranted();
+        showForeground(mic, false);
+        if (armed) {
+            if (intent.getBooleanExtra(EX_AUTOSTART, false)) startRecording();
+            return;
+        }
+        try {
+            MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+            projection = mpm.getMediaProjection(intent.getIntExtra(EX_CODE, 0), (Intent) intent.getParcelableExtra(EX_DATA));
+            if (projection == null) throw new IllegalStateException("izin ditolak");
+            projection.registerCallback(projCb, new Handler(Looper.getMainLooper()));
+        } catch (Throwable t) {
+            projection = null;
+            stopped(false, "Izin rekam gagal");
+            fgOn = false;
+                stopForeground(true);
+            stopSelf();
+            return;
+        }
+        armed = true;
+        if (intent.getBooleanExtra(EX_AUTOSTART, false)) startRecording();
+    }
+
+    private final MediaProjection.Callback projCb = new MediaProjection.Callback() {
+        @Override public void onStop() {
+            armed = false;
+            projection = null;
+            if (active) finishRecording();
+            else {
+                fgOn = false;
+                stopForeground(true);
+                stopSelf();
+            }
+        }
+    };
+
+    private void startRecording() {
+        if (!armed || projection == null) {
+            stopped(false, MSG_NEED_PERM);
+            return;
+        }
+        if (active || starting) return;
+        starting = true;
+        final boolean wantGame = Prefs.get(this).getBoolean(PREF_GAME, true) && audioGranted();
+        final boolean wantMic = Prefs.get(this).getBoolean(PREF_MIC, false) && audioGranted();
+        showForeground(wantMic, true);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    begin(wantGame, wantMic);
+                } catch (Throwable t) {
+                    abort("Rekam gagal: " + (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+                } finally {
+                    starting = false;
+                }
+            }
+        }).start();
+    }
+
     @SuppressWarnings("deprecation")
-    private void showForeground(boolean mic) {
+    private void showForeground(boolean mic, boolean recording) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Rekam layar",
@@ -156,9 +237,16 @@ public class RecordService extends Service {
                 new Intent(this, RecordService.class).setAction(ACTION_STOP), fl);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL)
                 : new Notification.Builder(this);
-        b.setSmallIcon(R.drawable.ic_stat).setContentTitle("Merekam layar")
-                .setContentText("Ketuk untuk berhenti").setContentIntent(stop).setOngoing(true);
+        b.setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle(recording ? "Merekam layar" : "Siap merekam")
+                .setContentText(recording ? "Ketuk untuk berhenti" : "Izin rekam layar aktif selama mode game")
+                .setContentIntent(stop).setOngoing(true);
         Notification n = b.build();
+        if (fgOn) {                                   // sudah foreground: cukup perbarui teks notifikasi
+            nm.notify(NOTIF_ID, n);
+            return;
+        }
+        fgOn = true;
         if (Build.VERSION.SDK_INT >= 29) {
             int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
             if (mic && Build.VERSION.SDK_INT >= 30) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
@@ -170,14 +258,8 @@ public class RecordService extends Service {
 
     // ------------------------------------------------------------------------------ mulai
 
-    private void begin(int code, Intent data, boolean wantGame, boolean wantMic) throws Exception {
-        MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
-        projection = mpm.getMediaProjection(code, data);
-        if (projection == null) throw new IllegalStateException("izin ditolak");
-        projection.registerCallback(new MediaProjection.Callback() {
-            @Override public void onStop() { finish(); }
-        }, new Handler(Looper.getMainLooper()));
-
+    private void begin(boolean wantGame, boolean wantMic) throws Exception {
+        resetState();
         // Ukuran: sisi pendek mengikuti pilihan (tidak diperbesar dari layar asli).
         WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         DisplayMetrics dm = new DisplayMetrics();
@@ -284,6 +366,21 @@ public class RecordService extends Service {
             aThread.start();
         }
         started(hasAudio);
+    }
+
+    private void resetState() {
+        finishing.set(false);
+        stopFlag = false;
+        vTrack = -1;
+        aTrack = -1;
+        hasAudio = false;
+        muxStarted = false;
+        lastV = -1;
+        lastA = -1;
+        vThread = null;
+        aThread = null;
+        outUri = null;
+        outFile = null;
     }
 
     /** Pilih encoder H.264 perangkat keras (hemat CPU). Encoder perangkat lunak dilewati. */
@@ -468,22 +565,49 @@ public class RecordService extends Service {
         releaseAll(false);
         active = false;
         stopped(false, msg);
-        stopForeground(true);
-        stopSelf();
+        showForeground(false, false);
     }
 
-    private void finish() {
-        if (finishing.getAndSet(true)) return;
+    /** Hentikan rekaman, simpan file. Memblokir. Mengembalikan true bila file tersimpan. */
+    private boolean finishCore() {
+        if (finishing.getAndSet(true)) return false;
+        stopFlag = true;
+        try { if (vEnc != null && active) vEnc.signalEndOfInputStream(); } catch (Throwable ignored) { }
+        try { if (vThread != null) vThread.join(4000); } catch (InterruptedException ignored) { }
+        try { if (aThread != null) aThread.join(4000); } catch (InterruptedException ignored) { }
+        boolean saved = muxStarted;
+        releaseAll(true);
+        active = false;
+        return saved;
+    }
+
+    /** Berhenti merekam; izin rekam tetap dipegang untuk rekaman berikutnya. */
+    private void finishRecording() {
         new Thread(new Runnable() {
             @Override public void run() {
-                stopFlag = true;
-                try { if (vEnc != null && active) vEnc.signalEndOfInputStream(); } catch (Throwable ignored) { }
-                try { if (vThread != null) vThread.join(4000); } catch (InterruptedException ignored) { }
-                try { if (aThread != null) aThread.join(4000); } catch (InterruptedException ignored) { }
-                boolean saved = muxStarted;
-                releaseAll(true);
-                active = false;
+                boolean saved = finishCore();
                 stopped(saved, saved ? "Rekaman tersimpan" : "Rekaman kosong");
+                if (armed) showForeground(false, false);
+            }
+        }).start();
+    }
+
+    /** Lepaskan semuanya (akhir sesi game). */
+    private void disarm() {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                if (active) {
+                    boolean saved = finishCore();
+                    stopped(saved, saved ? "Rekaman tersimpan" : "Rekaman kosong");
+                }
+                armed = false;
+                MediaProjection p = projection;
+                projection = null;
+                if (p != null) {
+                    try { p.unregisterCallback(projCb); } catch (Throwable ignored) { }
+                    try { p.stop(); } catch (Throwable ignored) { }
+                }
+                fgOn = false;
                 stopForeground(true);
                 stopSelf();
             }
@@ -492,16 +616,22 @@ public class RecordService extends Service {
 
     private void releaseAll(boolean keep) {
         try { if (display != null) display.release(); } catch (Throwable ignored) { }
+        display = null;
         try { if (vEnc != null) { vEnc.stop(); vEnc.release(); } } catch (Throwable ignored) { }
         try { if (aEnc != null) { aEnc.stop(); aEnc.release(); } } catch (Throwable ignored) { }
         try { if (aRec != null) aRec.release(); } catch (Throwable ignored) { }
         try { if (mRec != null) mRec.release(); } catch (Throwable ignored) { }
+        vEnc = null;
+        aEnc = null;
+        aRec = null;
+        mRec = null;
         synchronized (lock) {
             try { if (muxer != null && muxStarted) muxer.stop(); } catch (Throwable ignored) { }
             try { if (muxer != null) muxer.release(); } catch (Throwable ignored) { }
             muxer = null;
         }
         try { if (pfd != null) pfd.close(); } catch (Throwable ignored) { }
+        pfd = null;
         if (outUri != null) {
             try {
                 if (keep && muxStarted) {
@@ -516,12 +646,12 @@ public class RecordService extends Service {
             //noinspection ResultOfMethodCallIgnored
             outFile.delete();
         }
-        try { if (projection != null) projection.stop(); } catch (Throwable ignored) { }
     }
 
     @Override
     public void onDestroy() {
         active = false;
+        armed = false;
         super.onDestroy();
     }
 }

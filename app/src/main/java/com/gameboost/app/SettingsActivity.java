@@ -71,6 +71,7 @@ public class SettingsActivity extends Activity {
         buildPermRows((LinearLayout) findViewById(R.id.permList));
         buildSwitchRows((LinearLayout) findViewById(R.id.switchList));
         LinearLayout rec = findViewById(R.id.recSwitchList);
+        addSwitch(rec, "Minta izin rekam layar di awal mode game", R.drawable.ic_record, 0xFF30D158, "rec_arm");
         addSwitch(rec, "Rekam suara game", R.drawable.ic_sparkle, 0xFF0A84FF, RecordService.PREF_GAME);
         addSwitch(rec, "Rekam suara mikrofon (untuk konten)", R.drawable.ic_mic, 0xFFFF453A, RecordService.PREF_MIC);
         buildPreview();

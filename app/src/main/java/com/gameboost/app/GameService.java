@@ -359,7 +359,7 @@ public class GameService extends Service {
         handler.removeCallbacks(watchdog);
         handler.removeCallbacks(breakTask);
         stopSampling();
-        if (RecordService.active) RecordService.stop(this);
+        RecordService.disarm(this);
         if (wifiLock != null) {
             try {
                 if (wifiLock.isHeld()) wifiLock.release();
@@ -422,6 +422,7 @@ public class GameService extends Service {
             sampleThread.quitSafely();
             sampleThread = null;
         }
+        RecordService.disarm(this);
         if (RecordService.listener == recListener) RecordService.listener = null;
         stopForeground(true);
         super.onDestroy();
@@ -1195,6 +1196,10 @@ public class GameService extends Service {
         }
 
         @Override public void onStopped(boolean saved, String message) {
+            if (RecordService.MSG_NEED_PERM.equals(message)) {       // izin hilang: minta ulang
+                askRecordPermission();
+                return;
+            }
             boolean was = recording;
             recStarting = false;
             recording = false;
@@ -1214,7 +1219,7 @@ public class GameService extends Service {
         }
     };
 
-    /** Rekam layar + suara game (MediaProjection). Dialog izin muncul sebentar di atas game. */
+    /** Rekam layar + suara game. Izin biasanya sudah disimpan di awal sesi, jadi tidak pindah layar. */
     private void toggleRecord() {
         RecordService.listener = recListener;
         if (RecordService.active) {
@@ -1225,6 +1230,15 @@ public class GameService extends Service {
         recStarting = true;
         handler.removeCallbacks(autoHide);
         closePanel();
+        if (RecordService.armed) {
+            RecordService.start(this);
+        } else {
+            askRecordPermission();
+        }
+    }
+
+    /** Cadangan bila izin belum disimpan (mis. mode game aktif otomatis): layar bening sesaat. */
+    private void askRecordPermission() {
         try {
             startActivity(new Intent(this, RecordPermActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION));

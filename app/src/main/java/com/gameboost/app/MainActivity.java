@@ -307,6 +307,61 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- mode game
 
+    private boolean armAsked = false;
+    private static final int REQ_REC = 71, REQ_AUDIO = 72;
+
+    private boolean wantArm() {
+        return Prefs.flag(this, "rec_arm") && !RecordService.armed;
+    }
+
+    private void askRecordArm() {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                if (ShizukuHelper.ready()) {
+                    // Dengan Shizuku, izin diberikan diam-diam: tanpa dialog sistem.
+                    ShizukuHelper.exec("appops set " + getPackageName() + " PROJECT_MEDIA allow\n"
+                            + "pm grant " + getPackageName() + " android.permission.RECORD_AUDIO\n");
+                }
+                runOnUiThread(new Runnable() { @Override public void run() { armAudioStep(); } });
+            }
+        }).start();
+    }
+
+    private void armAudioStep() {
+        boolean wantAudio = prefs.getBoolean(RecordService.PREF_GAME, true) || prefs.getBoolean(RecordService.PREF_MIC, false);
+        if (wantAudio && Build.VERSION.SDK_INT >= 23
+                && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
+        } else {
+            armProjectionStep();
+        }
+    }
+
+    private void armProjectionStep() {
+        try {
+            android.media.projection.MediaProjectionManager m = (android.media.projection.MediaProjectionManager)
+                    getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+            startActivityForResult(m.createScreenCaptureIntent(), REQ_REC);
+        } catch (Exception e) {
+            startMode();                      // lanjut tanpa izin rekam
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] p, int[] r) {
+        super.onRequestPermissionsResult(code, p, r);
+        if (code == REQ_AUDIO) armProjectionStep();
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != REQ_REC) return;
+        if (res == RESULT_OK && data != null) RecordService.arm(this, res, data, false);
+        startMode();                          // lanjut masuk game, izin atau tidak
+    }
+
     private void startMode() {
         final GameItem game = selectedItem();
         if (game == null) {
@@ -323,6 +378,15 @@ public class MainActivity extends Activity {
                 && !ShizukuHelper.ready()) {
             toast("Shizuku belum aktif, memakai cara biasa. Ketuk kartu Shizuku untuk panduannya.");
         }
+
+        // Izin rekam layar diminta di awal sesi (di GameBoost), supaya merekam di dalam game tidak
+        // memindahkan layar lagi.
+        if (!armAsked && wantArm()) {
+            armAsked = true;
+            askRecordArm();
+            return;
+        }
+        armAsked = false;
 
         if (Prefs.flag(this, "anim")) {
             // Animasi masuk game: persiapan dijalankan di layar itu, lalu game terbuka.

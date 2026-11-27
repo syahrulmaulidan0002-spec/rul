@@ -70,11 +70,7 @@ public class RecordPermActivity extends Activity {
         super.onActivityResult(req, res, data);
         if (req != REQ_PROJ) return;
         if (res == RESULT_OK && data != null) {
-            Intent i = new Intent(this, RecordService.class).setAction(RecordService.ACTION_START)
-                    .putExtra(RecordService.EX_CODE, res).putExtra(RecordService.EX_DATA, data)
-                    .putExtra(RecordService.EX_GAME, wantGame && audioOk)
-                    .putExtra(RecordService.EX_MIC, wantMic && audioOk);
-            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+            RecordService.arm(this, res, data, true);      // simpan izin lalu langsung mulai merekam
             finish();
         } else {
             fail("Izin rekam ditolak");
