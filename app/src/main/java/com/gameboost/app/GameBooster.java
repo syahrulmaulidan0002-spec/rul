@@ -42,6 +42,8 @@ final class GameBooster {
     private static final String KEY_SUSPENDED = "suspended";
     private static final String KEY_PERF_ACTIVE = "perf_active";
     private static final String KEY_PERF_GAME = "perf_game";
+    private static final String KEY_SAT_ACTIVE = "sat_active";
+    static final String PREF_SAT = "sat";      // 100 = normal, 100..140 = lebih tajam
     private static final String KEY_PREV_MIN_RR = "prev_min_rr";
     private static final String KEY_PREV_PEAK_RR = "prev_peak_rr";
     private static final String KEY_NET_ACTIVE = "net_active";
@@ -330,7 +332,7 @@ final class GameBooster {
         Set<String> left = new HashSet<>(sp.getStringSet(KEY_SUSPENDED, Collections.<String>emptySet()));
         left.removeAll(frozen);
         sp.edit().putStringSet(KEY_SUSPENDED, left).putBoolean(KEY_PERF_ACTIVE, false)
-                .putBoolean(KEY_RR_CHANGED, false)
+                .putBoolean(KEY_RR_CHANGED, false).putBoolean(KEY_SAT_ACTIVE, false)
                 .putBoolean(KEY_NET_ACTIVE, false).apply();
         return frozen.size();
     }
@@ -434,11 +436,26 @@ final class GameBooster {
         }
         sb.append("settings put global low_power 0\n");
 
+        int sat = Prefs.get(app).getInt(PREF_SAT, 100);
+        if (sat > 100 && sat <= 160) {
+            // Warna lebih pekat selama game (SurfaceFlinger). Dikembalikan ke 1.0 saat selesai.
+            sb.append(String.format(Locale.US, "service call SurfaceFlinger 1022 f %.2f\n", sat / 100f));
+            ed.putBoolean(KEY_SAT_ACTIVE, true);
+        }
+
         ed.putString(KEY_PERF_GAME, gamePkg);
         ed.putBoolean(KEY_PERF_ACTIVE, true);
         ed.apply();
 
         ShizukuHelper.exec(sb.toString());
+    }
+
+    /** Kembalikan warna layar ke normal sekarang (tombol "Reset warna"). Jalankan di thread background. */
+    static boolean resetSaturation(Context ctx) {
+        if (!ShizukuHelper.ready()) return false;
+        String out = ShizukuHelper.exec("service call SurfaceFlinger 1022 f 1.0\n");
+        if (out != null) state(ctx.getApplicationContext()).edit().putBoolean(KEY_SAT_ACTIVE, false).apply();
+        return out != null;
     }
 
     private static void appendPerfRestore(SharedPreferences sp, StringBuilder sb) {
@@ -449,6 +466,9 @@ final class GameBooster {
         if (sp.getBoolean(KEY_RR_CHANGED, false)) {
             appendRestoreSetting(sb, "min_refresh_rate", sp.getFloat(KEY_PREV_MIN_RR, -1f));
             appendRestoreSetting(sb, "peak_refresh_rate", sp.getFloat(KEY_PREV_PEAK_RR, -1f));
+        }
+        if (sp.getBoolean(KEY_SAT_ACTIVE, false)) {
+            sb.append("service call SurfaceFlinger 1022 f 1.0\n");
         }
         if (sp.getInt(KEY_PREV_LOW_POWER, 0) == 1) {
             sb.append("settings put global low_power 1\n");

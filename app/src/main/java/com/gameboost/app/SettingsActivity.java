@@ -71,6 +71,7 @@ public class SettingsActivity extends Activity {
         buildPermRows((LinearLayout) findViewById(R.id.permList));
         buildSwitchRows((LinearLayout) findViewById(R.id.switchList));
         buildPreview();
+        buildSaturation();
     }
 
     // ---------------------------------------------------------------- simulasi panel
@@ -99,6 +100,44 @@ public class SettingsActivity extends Activity {
         }
     };
 
+    private void buildSaturation() {
+        final View before = findViewById(R.id.satBefore);
+        final View after = findViewById(R.id.satAfter);
+        int[] cols = {0xFFB4574F, 0xFFC99A3E, 0xFF6C9E57, 0xFF4B86AD, 0xFF8467AC};
+        android.graphics.drawable.GradientDrawable g1 = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, cols);
+        android.graphics.drawable.GradientDrawable g2 = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, cols);
+        g1.setCornerRadius(10f * getResources().getDisplayMetrics().density);
+        g2.setCornerRadius(10f * getResources().getDisplayMetrics().density);
+        before.setBackground(g1);
+        after.setBackground(g2);
+        final TextView val = findViewById(R.id.tvSatVal);
+        SeekBar sb = findViewById(R.id.seekSat);
+        int cur = Math.max(100, Math.min(140, prefs.getInt(GameBooster.PREF_SAT, 100)));
+        sb.setProgress(cur - 100);
+        applySatPreview(g2, val, cur);
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int p, boolean user) {
+                applySatPreview((android.graphics.drawable.GradientDrawable) after.getBackground(), val, 100 + p);
+                prefs.edit().putInt(GameBooster.PREF_SAT, 100 + p).apply();
+            }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        });
+        findViewById(R.id.btnResetSat).setOnClickListener(v -> new Thread(() -> {
+            final boolean ok = GameBooster.resetSaturation(this);
+            ui.post(() -> toast(ok ? "Warna layar dikembalikan" : "Shizuku belum siap"));
+        }).start());
+    }
+
+    private void applySatPreview(android.graphics.drawable.GradientDrawable g, TextView val, int pct) {
+        android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
+        cm.setSaturation(pct / 100f);
+        g.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
+        val.setText(pct <= 100 ? "Mati" : "+" + (pct - 100) + "%");
+    }
+
     private void buildPreview() {
         FrameLayout box = findViewById(R.id.previewBox);
         View pr = LayoutInflater.from(this).inflate(R.layout.overlay_panel, box, false);
@@ -109,6 +148,9 @@ public class SettingsActivity extends Activity {
         ((BatteryView) pr.findViewById(R.id.battery)).setLevel(78, false);
         ((TextView) pr.findViewById(R.id.tvBatt)).setText("78%");
         ((TextView) pr.findViewById(R.id.tvTemp)).setText("36.2°C");
+        TextView pf = pr.findViewById(R.id.tvFps);
+        pf.setText("60 FPS");
+        pf.setTextColor(0xFF30D158);
         ((TextView) pr.findViewById(R.id.tvNetFocus)).setText("Fokus ke game");
         ((TextView) pr.findViewById(R.id.tvHint)).setText("Performa stabil");
         ((ImageView) pr.findViewById(R.id.icNetFocus)).setImageTintList(ColorStateList.valueOf(0xFF30D158));

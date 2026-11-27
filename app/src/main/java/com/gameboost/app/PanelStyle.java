@@ -59,7 +59,7 @@ final class PanelStyle {
             if (row == null) continue;
             for (int i = 0; i < row.getChildCount(); i++) row.getChildAt(i).setBackground(tile(c, o));
         }
-        int[] pills = {R.id.pillNet, R.id.pillTemp};
+        int[] pills = {R.id.pillNet, R.id.pillFps, R.id.pillTemp};
         for (int id : pills) {
             View v = root.findViewById(id);
             if (v != null) v.setBackground(tile(c, o));

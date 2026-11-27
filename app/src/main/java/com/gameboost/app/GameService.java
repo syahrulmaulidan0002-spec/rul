@@ -96,7 +96,8 @@ public class GameService extends Service {
     private WifiManager.WifiLock wifiLock;
     private ImageView icNetFocus;
     private TextView tvNetFocus;
-    private TextView tvBatt, tvTemp, tvHint, tvToast, tvClean;
+    private TextView tvBatt, tvTemp, tvHint, tvToast, tvClean, tvFps;
+    private volatile int lastFps = -1;
     private final Metric[] metrics = new Metric[4];     // CPU, GPU, RAM, Internet
     private static final int M_CPU = 0, M_GPU = 1, M_RAM = 2, M_NET = 3;
 
@@ -171,6 +172,7 @@ public class GameService extends Service {
             SysStats st = stats;
             if (!sampling || st == null) return;
             final SysStats.Snap snap = st.sample(getApplicationContext());
+            lastFps = FpsMeter.read(gamePkg);
             handler.post(new Runnable() {
                 @Override public void run() { applyStats(snap); }
             });
@@ -755,6 +757,7 @@ public class GameService extends Service {
         tvBatt = root.findViewById(R.id.tvBatt);
         tvTemp = root.findViewById(R.id.tvTemp);
         tvHint = root.findViewById(R.id.tvHint);
+        tvFps = root.findViewById(R.id.tvFps);
         tvToast = root.findViewById(R.id.tvToast);
         tvClean = root.findViewById(R.id.tvClean);
         btnClean = root.findViewById(R.id.btnClean);
@@ -1060,6 +1063,12 @@ public class GameService extends Service {
             Icons.clear(net.value);
             net.sub.setText(netType);
             Icons.clear(net.sub);
+        }
+
+        int fps = lastFps;
+        if (tvFps != null) {
+            tvFps.setText(fps >= 0 ? fps + " FPS" : "— FPS");
+            tvFps.setTextColor(fps < 0 ? 0xB8FFFFFF : fps >= 55 ? 0xFF30D158 : fps >= 30 ? 0xFFFF9F0A : 0xFFFF453A);
         }
 
         // RAM ikut dicatat di siklus yang sama supaya keempat grafik sinkron.
