@@ -339,8 +339,21 @@ public class GameService extends Service {
         scheduleBreak();
 
         if (p.overlay && canDraw() && root == null) {
-            showPanel();
-            if (root != null) openPanel(FIRST_HIDE_MS);   // tampil sebentar lalu masuk ke tepi
+            try {
+                showPanel();
+                if (root != null) openPanel(FIRST_HIDE_MS);   // tampil sebentar lalu masuk ke tepi
+            } catch (Throwable e) {
+                // Panel tidak boleh membuat layanan (dan game) ikut terganggu.
+                android.util.Log.e("GameBoost", "panel gagal", e);
+                try {
+                    if (root != null && wm != null) wm.removeView(root);
+                } catch (Throwable ignored) {
+                }
+                root = null;
+                expanded = false;
+                android.widget.Toast.makeText(this, "Panel gagal dibuat: " + e.getClass().getSimpleName()
+                        + (e.getMessage() == null ? "" : " - " + e.getMessage()), android.widget.Toast.LENGTH_LONG).show();
+            }
         }
         // Data grafik terus dicatat selama mode game, walau panel sedang tersimpan di tepi layar.
         if (root != null && !sampling) startSampling();
@@ -783,7 +796,7 @@ public class GameService extends Service {
         // Panah tutup menunjuk ke arah tepi tempat panel menempel.
         icCollapse.setRotation(onRight ? 0f : 180f);
         if (!onRight) {
-            ((FrameLayout.LayoutParams) handleCapsule.getLayoutParams()).gravity = Gravity.START;
+            ((LinearLayout.LayoutParams) handleCapsule.getLayoutParams()).gravity = Gravity.START;
             handleCapsule.setScaleX(-1f);
         }
 
