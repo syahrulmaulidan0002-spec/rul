@@ -73,7 +73,7 @@ public class GameService extends Service {
     private static final int NOTIF_SUMMARY_ID = 8;
     private static final int NOTIF_BREAK_ID = 9;
     private static final int NOTIF_SHOT_ID = 10;   // 10 = screenshot, 11 = rekaman
-    private static final int CARD_W_DP = 300;
+    private static final int CARD_W_DP = 340;
     private static final long AUTO_HIDE_MS = 12000;
     private static final long FIRST_HIDE_MS = 6000;
     private static final long SAMPLE_MS = 2000;
