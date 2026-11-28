@@ -30,7 +30,7 @@
 
     <LinearLayout
         android:id="@+id/card"
-        android:layout_width="340dp"
+        android:layout_width="288dp"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_overlay_card"
         android:orientation="vertical"
@@ -122,8 +122,8 @@
 
             <com.gameboost.app.FpsRing
                 android:id="@+id/fpsRing"
-                android:layout_width="104dp"
-                android:layout_height="104dp" />
+                android:layout_width="88dp"
+                android:layout_height="88dp" />
 
             <LinearLayout
                 android:layout_width="0dp"

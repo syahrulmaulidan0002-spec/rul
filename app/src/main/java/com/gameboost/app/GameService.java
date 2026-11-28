@@ -73,7 +73,8 @@ public class GameService extends Service {
     private static final int NOTIF_SUMMARY_ID = 8;
     private static final int NOTIF_BREAK_ID = 9;
     private static final int NOTIF_SHOT_ID = 10;   // 10 = screenshot, 11 = rekaman
-    private static final int CARD_W_DP = 340;
+    private static final int CARD_W_PORTRAIT_DP = 288, CARD_W_LAND_DP = 304;
+    private int cardWDp = CARD_W_PORTRAIT_DP;
     private static final long AUTO_HIDE_MS = 12000;
     private static final long FIRST_HIDE_MS = 6000;
     private static final long SAMPLE_MS = 2000;
@@ -854,6 +855,7 @@ public class GameService extends Service {
         btnRec.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { toggleRecord(); }
         });
+        applyAdapt();
         PanelStyle.apply(root, PanelStyle.opacity(this));
         Motion.pressAll(card);
         RecordService.listener = recListener;
@@ -946,7 +948,7 @@ public class GameService extends Service {
 
         @Override
         public boolean onTouch(View v, MotionEvent e) {
-            float w = dp(CARD_W_DP);
+            float w = dp(cardWDp);
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     downX = e.getRawX();
@@ -991,7 +993,7 @@ public class GameService extends Service {
             return;
         }
         expanded = true;
-        float w = dp(CARD_W_DP);
+        float w = dp(cardWDp);
         handle.setVisibility(View.GONE);
         card.setVisibility(View.VISIBLE);
         card.setTranslationX(onRight ? w : -w);
@@ -1026,7 +1028,7 @@ public class GameService extends Service {
         if (root == null || !expanded) return;
         expanded = false;
         handler.removeCallbacks(autoHide);
-        float w = dp(CARD_W_DP);
+        float w = dp(cardWDp);
         card.animate().cancel();
         card.animate().translationX(onRight ? w : -w).alpha(0f).setDuration(Motion.enabled(this) ? 220 : 0)
                 .setInterpolator(new android.view.animation.AccelerateInterpolator(1.3f))
@@ -1400,6 +1402,35 @@ public class GameService extends Service {
         }
     };
 
+    private boolean adaptInit = false, adaptLand = false;
+
+    /** Dua susunan ukuran (desain v7): portrait 288 dp, lanskap 304 dp dengan ring dan jarak lebih kecil. */
+    private void applyAdapt() {
+        if (root == null) return;
+        boolean land = getResources().getConfiguration().screenHeightDp < 520;
+        if (adaptInit && land == adaptLand) return;
+        adaptInit = true;
+        adaptLand = land;
+        cardWDp = land ? CARD_W_LAND_DP : CARD_W_PORTRAIT_DP;
+        card.getLayoutParams().width = dp(cardWDp);
+        card.requestLayout();
+        View ring = root.findViewById(R.id.fpsRing);
+        ring.getLayoutParams().width = dp(land ? 60 : 88);
+        ring.getLayoutParams().height = dp(land ? 60 : 88);
+        ring.requestLayout();
+        View hero = root.findViewById(R.id.heroCard);
+        hero.setPadding(dp(12), dp(land ? 10 : 12), dp(12), dp(land ? 10 : 12));
+        for (Metric m : metrics) {
+            if (m == null) continue;
+            ((View) m.spark.getParent()).setPadding(dp(land ? 8 : 9), dp(land ? 6 : 8), dp(land ? 8 : 9), dp(land ? 4 : 6));
+        }
+        View dock = root.findViewById(R.id.dock);
+        if (dock != null) {
+            ((ViewGroup.MarginLayoutParams) dock.getLayoutParams()).topMargin = dp(land ? 8 : 10);
+            dock.requestLayout();
+        }
+    }
+
     /** Pengecilan di layar pendek kini dilakukan ScaleFrame saat mengukur. */
     private void fitScale() {
     }
@@ -1453,7 +1484,7 @@ public class GameService extends Service {
         updateTemp();
 
         // Jaga posisi tetap di dalam layar jika layar diputar.
-        fitScale();
+        applyAdapt();
         int oy = lp.y;
         clampY();
         if (oy != lp.y) applyLayout();
