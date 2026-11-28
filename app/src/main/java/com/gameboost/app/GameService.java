@@ -1435,13 +1435,14 @@ public class GameService extends Service {
         SysInfo.Batt b = SysInfo.battery(this);
         netType = SysStats.networkType(this);
 
-        if (tvGame != null && gamePkg != null && !gamePkg.isEmpty() && !gamePkg.equals(shownPkg)) {
-            shownPkg = gamePkg;
+        String gp = (gamePkg != null && !gamePkg.isEmpty()) ? gamePkg : curFg;
+        if (tvGame != null && gp != null && !gp.isEmpty() && !gp.equals(shownPkg)) {
             try {
                 tvGame.setText(getPackageManager().getApplicationLabel(
-                        getPackageManager().getApplicationInfo(gamePkg, 0)));
+                        getPackageManager().getApplicationInfo(gp, 0)));
+                shownPkg = gp;
             } catch (Exception ignore) {
-                tvGame.setText("Mode game");
+                // coba lagi di siklus berikutnya
             }
         }
 

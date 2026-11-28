@@ -122,8 +122,8 @@
 
             <com.gameboost.app.FpsRing
                 android:id="@+id/fpsRing"
-                android:layout_width="96dp"
-                android:layout_height="96dp" />
+                android:layout_width="104dp"
+                android:layout_height="104dp" />
 
             <LinearLayout
                 android:layout_width="0dp"
