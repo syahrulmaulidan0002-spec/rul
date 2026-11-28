@@ -17,13 +17,12 @@
             android:id="@+id/handleCapsule"
             android:layout_width="14dp"
             android:layout_height="92dp"
-            android:layout_gravity="end"
-            android:background="@drawable/bg_handle_glass">
+            android:layout_gravity="end">
 
             <View
                 android:id="@+id/handleBar"
-                android:layout_width="4dp"
-                android:layout_height="44dp"
+                android:layout_width="5dp"
+                android:layout_height="52dp"
                 android:layout_gravity="center"
                 android:background="@drawable/bg_handle_bar" />
         </FrameLayout>
@@ -46,46 +45,19 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <FrameLayout
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:background="@drawable/bg_logo_tile">
-
-                <ImageView
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
-                    android:layout_gravity="center"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_bolt"
-                    android:tint="#FFFFFF" />
-            </FrameLayout>
-
-            <LinearLayout
+            <TextView
+                android:id="@+id/tvGame"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="GameBoost"
-                    android:textColor="#F2FFFFFF"
-                    android:textSize="13.5sp" />
-
-                <TextView
-                    android:id="@+id/tvGame"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxWidth="120dp"
-                    android:singleLine="true"
-                    android:text="Mode game"
-                    android:textColor="#99FFFFFF"
-                    android:textSize="10sp" />
-            </LinearLayout>
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:paddingStart="4dp"
+                android:singleLine="true"
+                android:text="Mode game"
+                android:textColor="#F2FFFFFF"
+                android:textSize="13.5sp"
+                android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -113,6 +85,12 @@
                     android:textColor="@color/ok"
                     android:textSize="9.5sp" />
             </LinearLayout>
+
+            <com.gameboost.app.BatteryView
+                android:id="@+id/battery"
+                android:layout_width="26dp"
+                android:layout_height="13dp"
+                android:layout_marginEnd="8dp" />
 
             <FrameLayout
                 android:id="@+id/btnCollapse"
@@ -183,6 +161,39 @@
                         android:fontFamily="sans-serif-medium"
                         android:text="--"
                         android:textColor="#FFFFFFFF"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="9dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_wifi"
+                        android:tint="@color/ok" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:text="Net Game"
+                        android:textColor="#A6FFFFFF"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvNetGame"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Stabil"
+                        android:textColor="@color/ok"
                         android:textSize="12.5sp" />
                 </LinearLayout>
 
@@ -328,6 +339,16 @@
                     android:text="Rekam"
                     android:textColor="#FFFFFFFF"
                     android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvRecStop"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="Berhenti"
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="11.5sp"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <LinearLayout

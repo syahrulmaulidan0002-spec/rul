@@ -92,6 +92,8 @@ public class GameService extends Service {
     private View root, handle, card, btnClean;
     private ImageView icCollapse;
     private FpsRing ringFps;
+    private BatteryView battery;
+    private TextView tvNetGame, tvRecStop;
     private TextView tvGame;
     private String shownPkg = "";
     private View handleBar, handleCapsule;
@@ -769,6 +771,9 @@ public class GameService extends Service {
         card = root.findViewById(R.id.card);
         icCollapse = root.findViewById(R.id.icCollapse);
         ringFps = root.findViewById(R.id.fpsRing);
+        battery = root.findViewById(R.id.battery);
+        tvNetGame = root.findViewById(R.id.tvNetGame);
+        tvRecStop = root.findViewById(R.id.tvRecStop);
         tvGame = root.findViewById(R.id.tvGame);
         handleBar = root.findViewById(R.id.handleBar);
         handleCapsule = root.findViewById(R.id.handleCapsule);
@@ -1161,6 +1166,9 @@ public class GameService extends Service {
         btnRec.setBackground(PanelStyle.recButton(this, recording, PanelStyle.opacity(this)));
         icRec.setImageResource(recording ? R.drawable.ic_stop_sq : R.drawable.ic_record);
         if (!recording) tvRec.setText("Rekam");
+        if (tvRecStop != null) tvRecStop.setVisibility(recording ? View.VISIBLE : View.GONE);
+        View clean = root == null ? null : root.findViewById(R.id.btnClean);
+        if (clean != null) clean.setVisibility(recording ? View.GONE : View.VISIBLE);
         if (recPulse != null) {
             recPulse.cancel();
             recPulse = null;
@@ -1346,6 +1354,11 @@ public class GameService extends Service {
         else if (wifi) text = "Wi-Fi latensi rendah (tanpa Shizuku)";
         else text = "Internet latar belakang belum dibatasi";
         int color = SysInfo.color(this, netFocus || wifi ? R.color.ok : R.color.muted);
+        if (tvNetGame != null) {
+            boolean good = netFocus || wifi;
+            tvNetGame.setText(good ? "Stabil" : "Biasa");
+            tvNetGame.setTextColor(SysInfo.color(this, good ? R.color.ok : R.color.muted));
+        }
         tvNetFocus.setText(text);
         tvNetFocus.setTextColor(color);
         icNetFocus.setColorFilter(color);
@@ -1354,6 +1367,10 @@ public class GameService extends Service {
     /** Suhu (dari baterai) diperbarui saat level/suhu berubah; ikon baterai sudah tidak dipakai. */
     private void updateBattery() {
         if (root == null) return;
+        if (battery != null) {
+            SysInfo.Batt b = SysInfo.battery(this);
+            battery.setLevel(b.level, b.charging);
+        }
         updateTemp();
     }
 
@@ -1383,13 +1400,8 @@ public class GameService extends Service {
         }
     };
 
-    /** Layar pendek (lanskap): kartu diperkecil seragam supaya utuh terlihat, tanpa mengubah desain. */
+    /** Pengecilan di layar pendek kini dilakukan ScaleFrame saat mengukur. */
     private void fitScale() {
-        if (root == null || !(root instanceof ScaleFrame) || card == null) return;
-        int ch = card.getHeight();
-        if (ch <= 0) return;
-        float avail = screen()[1] - dp(16);
-        ((ScaleFrame) root).setCardScale(Math.min(1f, avail / ch));
     }
 
     private void startHandleAnim() {

@@ -6,12 +6,10 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 /**
- * Pembungkus panel: bila layar terlalu pendek (mode lanskap), seluruh kartu diperkecil secara
- * seragam (bentuk dan isi tetap persis desain) alih-alih dipotong atau dirombak.
+ * Pembungkus panel: kartu selalu diukur sebesar isinya (tinggi tak dibatasi), lalu bila layar terlalu
+ * pendek (mode lanskap) seluruh kartu diperkecil seragam. Isi tidak pernah terjepit atau terpotong.
  */
 public class ScaleFrame extends FrameLayout {
-
-    private float s = 1f;
 
     public ScaleFrame(Context c) {
         super(c);
@@ -21,34 +19,35 @@ public class ScaleFrame extends FrameLayout {
         super(c, a);
     }
 
-    /** 0..1; 1 = ukuran asli. */
-    public void setCardScale(float v) {
-        v = Math.max(0.5f, Math.min(1f, v));
-        if (Math.abs(v - s) < 0.01f) return;
-        s = v;
-        requestLayout();
-    }
-
     @Override
     protected void onMeasure(int wSpec, int hSpec) {
-        super.onMeasure(wSpec, hSpec);
         View card = findViewById(R.id.card);
-        if (card == null) return;
-        card.setPivotX(0f);
-        card.setPivotY(0f);
-        card.setScaleX(s);
-        card.setScaleY(s);
         int w = 0, h = 0;
+        int availH = MeasureSpec.getMode(hSpec) == MeasureSpec.UNSPECIFIED
+                ? Integer.MAX_VALUE : MeasureSpec.getSize(hSpec);
+        float d = getResources().getDisplayMetrics().density;
         for (int i = 0; i < getChildCount(); i++) {
             View ch = getChildAt(i);
             if (ch.getVisibility() == GONE) continue;
-            int cw = ch.getMeasuredWidth(), chh = ch.getMeasuredHeight();
             if (ch == card) {
-                cw = Math.round(cw * s);
-                chh = Math.round(chh * s);
+                ch.measure(getChildMeasureSpec(wSpec, 0, ch.getLayoutParams().width),
+                        MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                int ch0 = ch.getMeasuredHeight();
+                float s = 1f;
+                if (availH != Integer.MAX_VALUE && ch0 > 0) {
+                    s = Math.max(0.5f, Math.min(1f, (availH - 16f * d) / ch0));
+                }
+                ch.setPivotX(0f);
+                ch.setPivotY(0f);
+                ch.setScaleX(s);
+                ch.setScaleY(s);
+                w = Math.max(w, Math.round(ch.getMeasuredWidth() * s));
+                h = Math.max(h, Math.round(ch0 * s));
+            } else {
+                measureChild(ch, wSpec, hSpec);
+                w = Math.max(w, ch.getMeasuredWidth());
+                h = Math.max(h, ch.getMeasuredHeight());
             }
-            w = Math.max(w, cw);
-            h = Math.max(h, chh);
         }
         setMeasuredDimension(w, h);
     }

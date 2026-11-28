@@ -181,6 +181,8 @@ public class SettingsActivity extends Activity {
         pr.findViewById(R.id.handle).setVisibility(View.GONE);
         pr.findViewById(R.id.card).setVisibility(View.VISIBLE);
         pr.findViewById(R.id.btnCollapse).setVisibility(View.INVISIBLE);
+        ((TextView) pr.findViewById(R.id.tvGame)).setText("Block Blast");
+        ((BatteryView) pr.findViewById(R.id.battery)).setLevel(78, false);
         ((TextView) pr.findViewById(R.id.tvTemp)).setText("36.2°C");
         ((FpsRing) pr.findViewById(R.id.fpsRing)).setFps(60);
         ((TextView) pr.findViewById(R.id.tvNetFocus)).setText("Fokus ke game");
